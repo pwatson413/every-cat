@@ -1,0 +1,1579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Every Cat in the World</title>
+<!--
+  EVERY CAT IN THE WORLD: build notes for whoever edits this page next.
+
+  One file holds the whole app: styles, species data, quiz logic and interface, in that order below.
+  Photos are separate files of this artifact, listed in the JSON block with id="photo-manifest":
+
+    { "cats":   { "<cat id>": [ { "f": "p/3fa9c1.jpg", "w": 1000, "h": 667,
+                                   "by": "Photographer", "lic": "CC BY-SA 4",
+                                   "src": "https://commons.wikimedia.org/wiki/File:...",
+                                   "cb": 0, "note": "", "loc": "" } ] },
+      "thumbs": { "<cat id>": "t/3fa9c1.jpg" } }
+
+  - Cat ids are the "id" values in the CATS list in the data script (41 of them).
+  - "f" is a path relative to this page. Give files names that do not reveal the species.
+  - "cb": 1 marks a curveball (melanistic, white or king forms, unusual house-cat breeds); "note" says what it is.
+  - "loc" is where the photo was taken; it is shown only for cats that have a "hint" in the data.
+  - "thumbs" are 160px squares for the list of all cats.
+  - With an empty manifest every question falls back to written field marks, and stations stop at "learning".
+    As soon as a cat has photos, its questions use them. Nothing else in the page needs to change.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Literata:ital,wght@0,400;0,600;1,400;1,500&amp;family=National+Park:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+:root {
+  /* Layout idea: one column on phones with tabs at the bottom; from 900px the photo sits beside the
+     answer panel and the tabs move up into the top bar. The eight lineage colours are the only loud
+     thing on the page; everything else is paper and one deep spruce ink. */
+  --paper: #eef1ec;
+  --raised: #f9fbf7;
+  --ink: #10291f;
+  --ink-2: #48604f;
+  --rule: #c6d0c5;
+  --stage: #0b1b15;
+  --stage-ink: #e9f0ea;
+  --good: #0ca30c;
+  --bad: #d03b3b;
+  --warn: #fab219;
+  /* lineage colours, in the order the lines branched off; validated for colour-blind separation */
+  --l1: #876204; --l2: #0052b4; --l3: #b6322d; --l4: #0688a7;
+  --l5: #d26600; --l6: #8b5dce; --l7: #047e39; --l8: #c85aac;
+  --display: "National Park", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --text: "Literata", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --fs-0: 0.8125rem; --fs-1: 0.9375rem; --fs-2: 1.0625rem; --fs-3: 1.3125rem; --fs-4: 1.75rem; --fs-5: 2.5rem;
+  --gutter: 16px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0f1a16; --raised: #17261f; --ink: #e7efe8; --ink-2: #a2b4a7; --rule: #2b3e35;
+    --stage: #060d0a; --stage-ink: #e9f0ea;
+    --l1: #bc8a0f; --l2: #3370c7; --l3: #e16a60; --l4: #06a4c9;
+    --l5: #b05400; --l6: #a37ce1; --l7: #40ad60; --l8: #a74990;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0f1a16; --raised: #17261f; --ink: #e7efe8; --ink-2: #a2b4a7; --rule: #2b3e35;
+  --stage: #060d0a; --stage-ink: #e9f0ea;
+  --l1: #bc8a0f; --l2: #3370c7; --l3: #e16a60; --l4: #06a4c9;
+  --l5: #b05400; --l6: #a37ce1; --l7: #40ad60; --l8: #a74990;
+  color-scheme: dark;
+}
+.line-1 { --lc: var(--l1); } .line-2 { --lc: var(--l2); } .line-3 { --lc: var(--l3); } .line-4 { --lc: var(--l4); }
+.line-5 { --lc: var(--l5); } .line-6 { --lc: var(--l6); } .line-7 { --lc: var(--l7); } .line-8 { --lc: var(--l8); }
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--paper); color: var(--ink); font: 400 var(--fs-2)/1.5 var(--text); -webkit-text-size-adjust: 100%; overflow: hidden; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+h1, h2, h3, h4 { font-family: var(--display); line-height: 1.1; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+p { margin: 0; }
+a { color: inherit; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; border-radius: 6px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* ---------- frame ---------- */
+#app { height: 100%; display: flex; flex-direction: column; max-width: 1120px; margin: 0 auto; }
+.bar { flex: none; display: flex; align-items: center; gap: 12px; padding: 10px var(--gutter) 8px; }
+.brand { font: 800 1.22rem/1 var(--display); letter-spacing: -0.02em; text-decoration: none; white-space: nowrap; }
+.known { margin-left: auto; display: inline-flex; align-items: center; gap: 9px; padding: 6px 12px 6px 10px; border: 1.5px solid var(--rule); border-radius: 999px;
+  font: 700 var(--fs-1)/1 var(--display); font-variant-numeric: tabular-nums; text-decoration: none; white-space: nowrap; }
+.known:hover { border-color: var(--ink); }
+.meter { display: inline-flex; gap: 2px; align-items: flex-end; height: 16px; }
+.meter i { width: 4px; height: 100%; border-radius: 2px; background: linear-gradient(to top, var(--lc) calc(var(--f, 0) * 100%), color-mix(in srgb, var(--lc) 24%, transparent) 0); }
+#view { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; outline: none; }
+.tabs { flex: none; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1.5px solid var(--rule); background: var(--paper); }
+.tab { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 4px 9px; text-decoration: none; color: var(--ink-2); font: 600 0.8rem/1 var(--display); box-shadow: inset 0 3px 0 transparent; }
+.tab svg { width: 24px; height: 24px; }
+.tab[aria-current="page"] { color: var(--ink); box-shadow: inset 0 3px 0 var(--ink); }
+.tab:focus-visible { outline-offset: -4px; }
+
+/* ---------- shared bits ---------- */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 50px; padding: 0 20px; border-radius: 12px; border: 1.5px solid var(--ink);
+  background: var(--ink); color: var(--paper); font: 700 1.05rem/1.1 var(--display); text-decoration: none; text-align: center; }
+.btn:active { transform: translateY(1px); }
+.btn.quiet { background: transparent; color: var(--ink); }
+.btn.small { min-height: 38px; padding: 0 14px; font-size: var(--fs-1); border-radius: 10px; }
+.btn[disabled] { opacity: 0.45; cursor: default; }
+.link { background: none; border: 0; padding: 6px 0; font: 600 var(--fs-1)/1.2 var(--display); color: var(--ink-2); text-decoration: underline; text-underline-offset: 3px; }
+.link:hover { color: var(--ink); }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 8px; border: 1.5px solid var(--lc, var(--rule)); border-radius: 999px; font: 600 var(--fs-0)/1.3 var(--display); white-space: nowrap; }
+.chip .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--lc); }
+.sci { font-style: italic; }
+.notice { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1.5px dashed var(--ink-2); border-radius: 12px; font-size: var(--fs-1); line-height: 1.4; color: var(--ink-2); }
+.notice b { font-family: var(--display); color: var(--ink); }
+.tells { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px; }
+.tells li { position: relative; padding-left: 20px; line-height: 1.4; }
+.tells li::before { content: ""; position: absolute; left: 0; top: 0.42em; width: 10px; height: 10px; border-radius: 50%; border: 3px solid var(--lc, var(--ink)); }
+
+/* ---------- quiz ---------- */
+.quiz { min-height: 100%; display: flex; flex-direction: column; gap: 10px; padding: 4px var(--gutter) 14px; }
+.quiz-top { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
+.deck-btn { flex: 1 1 88px; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 42px; padding: 0 12px; border: 1.5px solid var(--rule); border-radius: 10px;
+  background: var(--raised); font: 700 var(--fs-1)/1.15 var(--display); text-align: left; }
+.deck-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.deck-btn svg { flex: none; width: 16px; height: 16px; }
+.deck-btn:hover { border-color: var(--ink); }
+.seg { flex: 0 1 auto; display: grid; grid-template-columns: 1fr 1fr; padding: 3px; border: 1.5px solid var(--rule); border-radius: 10px; background: var(--raised); }
+.seg button { min-height: 33px; border: 0; border-radius: 7px; background: transparent; font: 700 var(--fs-1)/1 var(--display); color: var(--ink-2); padding: 0 10px; white-space: nowrap; }
+.quiz-top .seg { grid-template-columns: auto auto; }
+.seg button[aria-checked="true"] { background: var(--ink); color: var(--paper); }
+.exam-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; font: 700 var(--fs-1)/1.2 var(--display); min-height: 42px; }
+.exam-top .count { font-variant-numeric: tabular-nums; }
+.pips { display: flex; gap: 4px; align-items: center; min-height: 8px; }
+.pips i { flex: 1; height: 6px; border-radius: 3px; background: var(--rule); }
+.pips i.right { background: var(--good); }
+.pips i.wrong { background: var(--bad); }
+.pips i.now { background: var(--ink); }
+.pips.long { gap: 0; height: 6px; border-radius: 3px; background: var(--rule); overflow: hidden; }
+.pips.long i { flex: none; height: 100%; border-radius: 0; background: var(--ink); width: calc(var(--p) * 100%); }
+
+.stage { position: relative; margin: 0; flex: 1 1 0; min-height: 210px; background: var(--stage); color: var(--stage-ink); border-radius: 14px; overflow: hidden; }
+.stage .wash { position: absolute; inset: -12%; width: 124%; height: 124%; max-width: none; object-fit: cover; filter: blur(26px) brightness(0.42); }
+.stage .shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; animation: fadein 0.25s ease-out; }
+.stage .zoom { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; cursor: zoom-in; }
+.stage .zoom:focus-visible { outline: 3px solid #fff; outline-offset: -5px; border-radius: 14px; }
+.pin { position: absolute; left: 10px; bottom: 10px; max-width: calc(100% - 20px); display: inline-flex; gap: 6px; align-items: center; padding: 6px 10px; border-radius: 8px; background: rgba(6, 13, 10, 0.74); color: #fff;
+  font: 600 var(--fs-0)/1.25 var(--display); pointer-events: none; }
+.pin svg { flex: none; width: 14px; height: 14px; }
+.stage.clues { flex: none; min-height: 0; overflow: visible; display: flex; flex-direction: column; justify-content: center; gap: 12px; padding: 20px 22px; }
+.stage.clues .kicker { font: 600 var(--fs-0)/1.3 var(--display); opacity: 0.75; }
+.stage.clues .tells { gap: 10px; font-size: 1.14rem; }
+.stage.clues .tells li::before { border-color: var(--stage-ink); opacity: 0.6; }
+.stage.clues .range { font-size: var(--fs-1); opacity: 0.85; }
+
+.panel { flex: none; display: grid; gap: 10px; align-content: start; }
+.ask { font-size: var(--fs-3); font-weight: 800; }
+.options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.opt { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 58px; padding: 8px 12px; border: 1.5px solid var(--rule); border-radius: 12px; background: var(--raised);
+  font: 600 1.06rem/1.2 var(--display); text-align: left; }
+@media (hover: hover) { .opt:hover { border-color: var(--ink); } }
+.opt:active { transform: translateY(1px); }
+.opt .key { flex: none; display: none; width: 24px; height: 24px; border-radius: 6px; border: 1.5px solid var(--rule); place-items: center; font-size: var(--fs-0); color: var(--ink-2); }
+.typed { display: flex; gap: 8px; }
+.typed input { flex: 1; min-width: 0; height: 52px; padding: 0 14px; border: 1.5px solid var(--ink); border-radius: 12px; background: var(--raised); font: 600 1.1rem var(--display); }
+.typed input:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; border-radius: 12px; }
+.typed input::placeholder { color: var(--ink-2); font-weight: 500; opacity: 0.8; }
+.typed .btn { min-height: 52px; }
+.typed-msg { min-height: 1.4em; font-size: var(--fs-1); line-height: 1.4; }
+.typed-msg.almost { color: var(--ink); }
+.typed-msg b { font-family: var(--display); }
+.under { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.streak { font: 600 var(--fs-0)/1 var(--display); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+.reveal { display: grid; gap: 10px; }
+.verdict { display: flex; align-items: center; gap: 8px; font: 700 var(--fs-2)/1.2 var(--display); }
+.verdict .mark { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: var(--ink-2); }
+.verdict .mark svg { width: 14px; height: 14px; }
+.is-right .mark { background: var(--good); }
+.is-wrong .mark { background: var(--bad); }
+.verdict small { font: 500 var(--fs-0)/1.2 var(--display); color: var(--ink-2); }
+.cat-head { display: grid; gap: 4px; }
+.cat-name { font-size: var(--fs-4); font-weight: 800; }
+.cat-sub { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; color: var(--ink-2); }
+.mixup { padding: 9px 12px; border-left: 4px solid var(--bad); border-radius: 0 10px 10px 0; background: color-mix(in oklab, var(--bad) 9%, var(--paper)); font-size: var(--fs-1); line-height: 1.45; }
+.mixup b { font-family: var(--display); }
+.mixup.with-thumb { display: grid; grid-template-columns: 1fr 64px; gap: 12px; align-items: start; }
+.mixup img { width: 64px; height: 64px; border-radius: 8px; object-fit: cover; background: var(--rule); }
+.filled { display: flex; align-items: center; gap: 8px; font: 700 var(--fs-1)/1.2 var(--display); }
+.filled .dot { width: 18px; height: 18px; border-radius: 50%; background: var(--lc); animation: pop 0.5s ease-out; }
+.credit { font-size: var(--fs-0); color: var(--ink-2); line-height: 1.35; overflow-wrap: anywhere; }
+.reveal-actions { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; position: sticky; bottom: 0; padding: 10px 0 2px; background: var(--paper); box-shadow: 0 -12px 12px -8px var(--paper); }
+.reveal-actions .btn { flex: 1 1 180px; }
+
+/* ---------- round and exam summaries ---------- */
+.page { padding: 8px var(--gutter) 28px; display: grid; gap: 18px; align-content: start; max-width: 760px; }
+.page h1 { font-size: var(--fs-5); font-weight: 800; letter-spacing: -0.025em; }
+.page h2 { font-size: var(--fs-3); font-weight: 800; }
+.page .lede { font-size: 1.15rem; line-height: 1.45; max-width: 60ch; }
+.page p { max-width: 65ch; }
+.score { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.score b { font: 800 4rem/0.9 var(--display); letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
+.score span { font: 600 var(--fs-2)/1.2 var(--display); color: var(--ink-2); }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.misses { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.misses li { display: grid; gap: 3px; padding: 10px 12px; border: 1.5px solid var(--rule); border-radius: 12px; background: var(--raised); }
+.misses .who { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.misses .who a { font: 700 1.1rem/1.2 var(--display); }
+.misses .who span { font: 500 var(--fs-0)/1.2 var(--display); color: var(--ink-2); }
+.misses p { font-size: var(--fs-1); line-height: 1.45; }
+.cert { display: grid; gap: 8px; padding: 16px; border: 2.5px solid var(--ink); border-radius: 14px; }
+.cert h2 { font-size: var(--fs-4); }
+.cert textarea { width: 100%; min-height: 5.2em; border: 1.5px solid var(--rule); border-radius: 10px; background: var(--raised); color: inherit; font: 400 var(--fs-1)/1.4 var(--text); padding: 8px 10px; resize: none; }
+.bests { display: grid; gap: 4px; font: 600 var(--fs-1)/1.4 var(--display); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+/* ---------- the line map ---------- */
+.lines { padding: 8px 0 28px; }
+.lines-head { padding: 0 var(--gutter) 16px; display: grid; gap: 12px; }
+.lines-head h1 { font-size: var(--fs-5); font-weight: 800; letter-spacing: -0.025em; }
+.lines-head .lede { max-width: 58ch; }
+.tally { display: flex; flex-wrap: wrap; gap: 6px 18px; font: 600 var(--fs-1)/1.3 var(--display); }
+.tally span { display: inline-flex; align-items: center; gap: 7px; font-variant-numeric: tabular-nums; }
+.tally .dot, .stop .dot { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 4px solid var(--lc, var(--ink)); background: var(--paper); }
+.tally .dot { width: 16px; height: 16px; border-width: 3px; }
+.dot[data-stage="learning"], .stop[data-stage="learning"] .dot { background: radial-gradient(circle, var(--lc, var(--ink)) 0 27%, var(--paper) 31%); }
+.dot[data-stage="cold"], .stop[data-stage="cold"] .dot { background: var(--lc, var(--ink)); }
+.line { padding: 16px 0 8px; border-top: 1.5px solid var(--rule); break-inside: avoid; }
+.line-head { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; padding: 0 var(--gutter); }
+.line-head h2 { font-size: var(--fs-3); font-weight: 800; display: flex; align-items: center; gap: 10px; }
+.line-head h2::before { content: ""; width: 22px; height: 6px; border-radius: 3px; background: var(--lc); }
+.line-head p { grid-column: 1 / -1; color: var(--ink-2); font-size: var(--fs-1); line-height: 1.4; max-width: 58ch; }
+.stops { list-style: none; margin: 8px 0 0; padding: 0; position: relative; }
+.stops::before { content: ""; position: absolute; left: calc(var(--gutter) + 9px); top: 24px; bottom: 24px; width: 4px; border-radius: 2px; background: var(--lc); }
+.stop { position: relative; display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 14px; padding: 7px var(--gutter); min-height: 50px; text-decoration: none; }
+@media (hover: hover) { .stop:hover { background: color-mix(in srgb, var(--lc) 9%, transparent); } }
+.stop:focus-visible { outline-offset: -3px; }
+.stop .dot { position: relative; z-index: 1; }
+.stop-name { display: block; font: 700 1.1rem/1.15 var(--display); }
+.stop-sci { display: block; font: italic 400 var(--fs-0)/1.25 var(--text); color: var(--ink-2); }
+.stop-side { display: flex; align-items: center; gap: 10px; font: 600 var(--fs-0)/1 var(--display); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.stop-side img { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; background: var(--rule); }
+
+/* ---------- one cat ---------- */
+.cat { padding: 4px 0 28px; display: grid; gap: 18px; }
+.cat > * { padding-left: var(--gutter); padding-right: var(--gutter); }
+.back { justify-self: start; display: inline-flex; align-items: center; gap: 6px; font: 700 var(--fs-1)/1 var(--display); text-decoration: none; padding-top: 8px; padding-bottom: 8px; }
+.back svg { width: 16px; height: 16px; }
+.cat-title { display: grid; gap: 6px; }
+.cat-title h1 { font-size: var(--fs-5); font-weight: 800; letter-spacing: -0.025em; }
+.cat-title .sci { font-size: 1.2rem; }
+.cat-title .also { color: var(--ink-2); font-size: var(--fs-1); }
+.gallery { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: var(--gutter); padding-bottom: 6px; scrollbar-width: thin; }
+.gallery figure { flex: none; margin: 0; width: min(86%, 520px); scroll-snap-align: start; display: grid; gap: 5px; }
+.gallery img { width: 100%; aspect-ratio: 3 / 2; object-fit: cover; border-radius: 12px; background: var(--stage); display: block; }
+.gallery figcaption { font-size: var(--fs-0); color: var(--ink-2); line-height: 1.35; overflow-wrap: anywhere; }
+.gallery .tag { font-family: var(--display); font-weight: 700; color: var(--ink); }
+.nophoto { display: grid; place-items: center; min-height: 130px; border-radius: 14px; background: var(--stage); color: var(--stage-ink); text-align: center; padding: 18px var(--gutter); font: 600 var(--fs-1)/1.4 var(--display); margin: 0 var(--gutter); }
+.cat section { display: grid; gap: 10px; }
+.cat section h2 { font-size: var(--fs-3); font-weight: 800; }
+.cat section > p, .cat .tells { max-width: 62ch; }
+.versus { display: grid; gap: 10px; }
+.versus div { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding-left: 12px; border-left: 4px solid var(--vc, var(--rule)); max-width: 62ch; }
+.versus img { grid-column: 2; grid-row: 1 / span 2; width: 64px; height: 64px; border-radius: 8px; object-fit: cover; background: var(--rule); }
+.versus p { grid-column: 1; }
+.versus a { font: 700 1.08rem/1.2 var(--display); justify-self: start; }
+.versus p { font-size: var(--fs-1); line-height: 1.45; }
+.facts { margin: 0; display: grid; gap: 0; border-top: 1.5px solid var(--rule); max-width: 760px; }
+.facts div { display: grid; grid-template-columns: 96px 1fr; gap: 12px; padding: 9px 0; border-bottom: 1.5px solid var(--rule); }
+.facts dt { font: 700 var(--fs-1)/1.4 var(--display); color: var(--ink-2); }
+.facts dd { margin: 0; line-height: 1.4; }
+.pager { display: flex; justify-content: space-between; gap: 12px; }
+.pager a { font: 700 var(--fs-1)/1.2 var(--display); }
+
+/* ---------- notes ---------- */
+.table-wrap { overflow-x: auto; }
+table.names { border-collapse: collapse; width: 100%; min-width: 300px; font-size: var(--fs-1); line-height: 1.4; }
+.names th { text-align: left; font: 700 var(--fs-0)/1.3 var(--display); color: var(--ink-2); padding: 0 12px 6px 0; border-bottom: 1.5px solid var(--ink); }
+.names td { padding: 8px 12px 8px 0; border-bottom: 1.5px solid var(--rule); vertical-align: top; }
+.names td:first-child { width: 56%; }
+.names td:last-child { font-family: var(--display); font-weight: 700; }
+.page ul.plain { margin: 0; padding-left: 20px; display: grid; gap: 8px; max-width: 65ch; }
+.settings { display: grid; gap: 12px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; }
+.row > span { font: 600 var(--fs-2)/1.3 var(--display); }
+.row .seg { flex: 0 1 260px; }
+.row .seg.three { grid-template-columns: 1fr 1fr 1fr; }
+.credits { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: var(--fs-0); line-height: 1.4; overflow-wrap: anywhere; }
+.credits b { font-family: var(--display); }
+.sources { font-size: var(--fs-1); }
+.sources li { overflow-wrap: anywhere; }
+
+/* ---------- sheet and zoom ---------- */
+.scrim { position: fixed; inset: 0; background: rgba(6, 13, 10, 0.5); display: flex; align-items: flex-end; justify-content: center; z-index: 20; }
+.sheet { width: min(100%, 560px); max-height: 86%; display: flex; flex-direction: column; background: var(--paper); border-radius: 18px 18px 0 0; overflow: hidden; }
+.sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 14px var(--gutter) 10px; border-bottom: 1.5px solid var(--rule); }
+.sheet-head h2 { font-size: var(--fs-3); font-weight: 800; }
+.sheet-body { overflow-y: auto; padding: 6px 0 18px; }
+.sheet h3 { font: 700 var(--fs-0)/1.2 var(--display); color: var(--ink-2); padding: 14px var(--gutter) 4px; }
+.deck { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: center; width: 100%; padding: 10px var(--gutter); border: 0; background: transparent; text-align: left; }
+@media (hover: hover) { .deck:hover { background: var(--raised); } }
+.deck b { font: 700 1.05rem/1.2 var(--display); }
+.deck span { font: 500 var(--fs-0)/1.2 var(--display); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.deck[aria-current="true"] b::after { content: " \2713"; }
+.sheet .settings { padding: 8px var(--gutter) 0; }
+.zoomer { position: fixed; inset: 0; z-index: 30; background: #050a08; overflow: auto; cursor: zoom-out; }
+.zoomer img { display: block; width: 100%; height: 100%; object-fit: contain; max-width: none; }
+.zoomer.in img { width: 260%; height: auto; object-fit: initial; }
+.zoomer .close { position: fixed; top: 12px; right: 12px; width: 44px; height: 44px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, 0.16); color: #fff; font: 700 1.3rem/1 var(--display); }
+.zoomer .tip { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); padding: 6px 12px; border-radius: 8px; background: rgba(255, 255, 255, 0.14); color: #fff; font: 600 var(--fs-0)/1.2 var(--display); white-space: nowrap; pointer-events: none; }
+
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pop { 0% { transform: scale(0.4); } 60% { transform: scale(1.3); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* ---------- phones ---------- */
+@media (max-width: 899px) {
+  .quiz[data-kind="clue"][data-answered="1"] .stage { display: none; } /* the answer repeats the field marks */
+  .quiz[data-mode="type"] .stage:not(.clues) { flex: 0 0 auto; height: min(40vh, 320px); } /* keeps the box you type in above the keyboard */
+  .row .seg { flex: 1 1 100%; }
+}
+
+/* ---------- wider screens ---------- */
+@media (max-width: 339px) { .options { grid-template-columns: 1fr; } }
+@media (min-width: 560px) {
+  .scrim { align-items: center; }
+  .sheet { border-radius: 18px; }
+}
+@media (hover: hover) and (min-width: 700px) { .opt .key { display: grid; } }
+@media (min-width: 900px) {
+  :root { --gutter: 24px; }
+  #app { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto 1fr; }
+  .bar { grid-column: 1; }
+  .tabs { grid-column: 2; grid-row: 1; border-top: 0; display: flex; gap: 4px; align-items: center; padding-right: var(--gutter); }
+  .tab { flex-direction: row; gap: 8px; padding: 9px 14px; border-radius: 10px; font-size: var(--fs-1); box-shadow: none; }
+  .tab svg { width: 20px; height: 20px; }
+  .tab[aria-current="page"] { background: var(--ink); color: var(--paper); box-shadow: none; }
+  .known { margin-left: 16px; }
+  #view { grid-column: 1 / -1; }
+  .quiz { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(320px, 1fr); grid-template-rows: auto auto 1fr; gap: 12px 24px; padding-top: 8px; padding-bottom: 24px; }
+  .quiz-top, .exam-top, .quiz > .notice { grid-column: 1 / -1; }
+  .pips { grid-column: 1 / -1; }
+  .stage { grid-column: 1; grid-row: 3; min-height: 420px; }
+  .stage.clues { align-self: start; padding: 32px 36px; }
+  .stage.clues .tells { font-size: 1.3rem; gap: 14px; }
+  .seg { flex: 1 1 200px; }
+  .panel { grid-column: 2; grid-row: 3; align-content: start; }
+  .options { grid-template-columns: 1fr; }
+  .opt { min-height: 52px; padding: 9px 14px; }
+  .quiz-top .seg { grid-template-columns: 1fr 1fr; }
+  .lines-body { columns: 2; column-gap: 40px; padding: 0 calc(var(--gutter) - 16px); }
+  .lines-body .line { --gutter: 16px; }
+  .cat { max-width: 900px; }
+  .gallery figure { width: 440px; }
+}
+
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="bar">
+    <a class="brand" href="#train">Every Cat in the World</a>
+    <a class="known" id="known" href="#cats"><span class="meter" id="meter" aria-hidden="true"></span><span id="known-count">0/41</span></a>
+  </header>
+  <main id="view" tabindex="-1"></main>
+  <nav class="tabs" aria-label="Sections">
+    <a class="tab" data-tab="train" href="#train"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><path d="M12 7.8c1.1 1.2 1.6 2.6 1.6 4.2s-.5 3-1.6 4.2c-1.1-1.2-1.6-2.6-1.6-4.2s.5-3 1.6-4.2Z" fill="currentColor" stroke="none"/></svg>Train</a>
+    <a class="tab" data-tab="exam" href="#exam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="m8.3 12.3 2.6 2.6 4.9-5.3"/></svg>Exam</a>
+    <a class="tab" data-tab="cats" href="#cats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6.5v11"/><circle cx="6" cy="5" r="2"/><circle cx="6" cy="12" r="2" fill="currentColor"/><circle cx="6" cy="19" r="2"/><path d="M11.5 5H20M11.5 12H20M11.5 19H17"/></svg>All 41</a>
+    <a class="tab" data-tab="notes" href="#notes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.5h8.5L18 7v13.5H6z"/><path d="M9 11h6M9 15h6"/></svg>The rules</a>
+  </nav>
+</div>
+<script type="application/json" id="photo-manifest">{"cats":{"lion":[{"f":"p/bbfd0734.jpg","w":621,"h":1024,"by":"Varad Giri","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/57379348"},{"f":"p/5f7598f7.jpg","w":1024,"h":768,"by":"Megan Hanson","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/37344436"},{"f":"p/09bd5147.jpg","w":1100,"h":959,"by":"Falense","lic":"CC BY-SA 3.0","src":"https://commons.wikimedia.org/wiki/File:Okonjima_Lioness.jpg"},{"f":"p/166e2316.jpg","w":1100,"h":733,"by":"Charles J Sharp","lic":"CC BY-SA 4.0","src":"https://commons.wikimedia.org/wiki/File:Lion_(Panthera_leo)_old_male_Chobe.jpg"},{"f":"p/087ea6f1.jpg","w":880,"h":1100,"by":"Giles Laurent","lic":"CC BY-SA 4.0","src":"https://commons.wikimedia.org/wiki/File:011_The_lion_king_Tryggve_in_the_Serengeti_National_Park_Photo_by_Giles_Laurent.jpg"},{"f":"p/994cdf88.jpg","w":1024,"h":683,"by":"Greg Lasley","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/18038547"}],"tiger":[{"f":"p/2cf3035f.jpg","w":1024,"h":576,"by":"petr_sonin","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/111585375"},{"f":"p/3911bb6c.jpg","w":1024,"h":683,"by":"Morten Ross","lic":"CC BY 4.0","src":"https://www.inaturalist.org/observations/130812220"},{"f":"p/784649c0.jpg","w":683,"h":1024,"by":"raghu_kulkarni","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/2085612"},{"f":"p/70aa7c53.jpg","w":1100,"h":825,"by":"S. Taheri, edited by Fir0002","lic":"CC BY-SA 2.5","src":"https://commons.wikimedia.org/wiki/File:Sibirischer_tiger_de_edit02.jpg"},{"f":"p/29211588.jpg","w":1100,"h":733,"by":"Mathias Appel","lic":"CC0","src":"https://commons.wikimedia.org/wiki/File:Tiger_-_Flickr_-_Mathias_Appel.jpg"},{"f":"p/af62ba02.jpg","w":1100,"h":730,"by":"Hans Stieglitz","lic":"CC BY-SA 3.0","src":"https://commons.wikimedia.org/wiki/File:Tiger-2.jpg"},{"f":"p/e928367f.jpg","w":1100,"h":733,"by":"Basile Morin","lic":"CC BY-SA 4.0","src":"https://commons.wikimedia.org/wiki/File:Standing_white_tiger.jpg","cb":1,"note":"Curveball: white tiger, a colour form"}],"leopard":[{"f":"p/bd37d2fb.jpg","w":1024,"h":768,"by":"petr_sonin","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/52351219"},{"f":"p/aa17d1d2.jpg","w":1024,"h":683,"by":"Ryan Weakley","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/13426020"},{"f":"p/b8599f51.jpg","w":1100,"h":619,"by":"Sumeet Moghe","lic":"CC BY-SA 4.0","src":"https://commons.wikimedia.org/wiki/File:Male_leopard_-_Mara.jpg"},{"f":"p/3a9d1f7e.jpg","w":852,"h":1100,"by":"Axel Tschentscher","lic":"CC BY-SA 4.0","src":"https://commons.wikimedia.org/wiki/File:African_Leopard_Near_Okevi_Waterhole_Etosha_Namibia.jpg"},{"f":"p/3b61a443.jpg","w":1024,"h":682,"by":"Лариса Артемьева","lic":"CC0","src":"https://www.inaturalist.org/observations/108292969"},{"f":"p/b878444c.jpg","w":817,"h":1100,"by":"tropicaLiving","lic":"CC BY-SA 3.0","src":"https://commons.wikimedia.org/wiki/File:Panthera_pardus_close_up.jpg"},{"f":"p/5dab98e8.jpg","w":1024,"h":683,"by":"taipingling","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/201104305","cb":1,"note":"Curveball: black panther, a melanistic leopard"},{"f":"p/d2560dfe.jpg","w":1024,"h":683,"by":"Korakoch Pobprasert","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/225478440","cb":1,"note":"Curveball: black panther, a melanistic leopard"}],"jaguar":[{"f":"p/80281362.jpg","w":1024,"h":683,"by":"Trevor Van Loon","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/19598560"},{"f":"p/3cc2eed1.jpg","w":1024,"h":683,"by":"José G. Martínez-Fonseca","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/279294513"},{"f":"p/0b5c9b78.jpg","w":1024,"h":840,"by":"wildlife-naturalists","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/74925849"},{"f":"p/3eee0b81.jpg","w":1100,"h":898,"by":"Cburnett","lic":"CC BY-SA 3.0","src":"https://commons.wikimedia.org/wiki/File:Jaguar_head_shot-edit2.jpg"},{"f":"p/1af351b4.jpg","w":1100,"h":733,"by":"Giles Laurent","lic":"CC BY-SA 4.0","src":"https://commons.wikimedia.org/wiki/File:013_Jaguar_leaving_the_river_in_Encontro_das_%C3%81guas_State_Park_Photo_by_Giles_Laurent.jpg"},{"f":"p/2797f165.jpg","w":1100,"h":733,"by":"Charles J Sharp","lic":"CC BY-SA 4.0","src":"https://commons.wikimedia.org/wiki/File:Jaguar_(Panthera_onca_palustris)_male_Three_Brothers_River.JPG"},{"f":"p/cff49821.jpg","w":919,"h":1024,"by":"Pedro Igor Monteiro","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/258740644","cb":1,"note":"Curveball: black panther, a melanistic jaguar"},{"f":"p/c29bde4c.jpg","w":1024,"h":683,"by":"Anderson Sandro","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/66140010","cb":1,"note":"Curveball: black panther, a melanistic jaguar"}],"snow-leopard":[{"f":"p/16e2b1da.jpg","w":1024,"h":683,"by":"zametnya","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/172976895"},{"f":"p/95ac700c.jpg","w":1024,"h":768,"by":"kesangchunit","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/196354314"},{"f":"p/7f63192c.jpg","w":1100,"h":825,"by":"Irbis1983","lic":"Public domain","src":"https://commons.wikimedia.org/wiki/File:Irbis4.JPG"},{"f":"p/61604d90.jpg","w":764,"h":1100,"by":"Vassil","lic":"Public domain","src":"https://commons.wikimedia.org/wiki/File:L%C3%A9opard_des_neiges_14081.jpg"},{"f":"p/bd02947c.jpg","w":1100,"h":733,"by":"Alexandre Blanchon","lic":"CC BY-SA 4.0","src":"https://commons.wikimedia.org/wiki/File:Panth%C3%A8re_des_neiges_%C3%A0_Saint_martin_la_plaine.jpg"},{"f":"p/39c4cde9.jpg","w":1100,"h":730,"by":"MC84 OOZ57","lic":"CC BY-SA 4.0","src":"https://commons.wikimedia.org/wiki/File:Snow_leopard_Amneville_Zoo.jpg"}],"clouded-leopard":[{"f":"p/4c8d6f79.jpg","w":1024,"h":768,"by":"Ian Dugdale","lic":"CC BY 4.0","src":"https://www.inaturalist.org/observations/302041475","loc":"Phetchaburi, Thailand"},{"f":"p/1c23e185.jpg","w":1024,"h":768,"by":"rainylanielane","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/325429789"},{"f":"p/8544a82b.jpg","w":904,"h":1100,"by":"Lee Elvin","lic":"CC BY-SA 3.0","src":"https://commons.wikimedia.org/wiki/File:Clouded_Leopard_(205918213).jpeg"},{"f":"p/66e2815d.jpg","w":1100,"h":731,"by":"Abujoy","lic":"CC BY 4.0","src":"https://commons.wikimedia.org/wiki/File:Parc_des_felins_Felin_04.jpg"},{"f":"p/3a61f3ce.jpg","w":734,"h":1100,"by":"Charles Barilleaux","lic":"CC BY 2.0","src":"https://commons.wikimedia.org/wiki/File:Hanging_from_a_Fence_NashvilleZoo.jpg"},{"f":"p/d915b2f8.jpg","w":1100,"h":733,"by":"Matěj Baťha","lic":"CC BY-SA 3.0","src":"https://commons.wikimedia.org/wiki/File:Levhart_obl%C3%A1%C4%8Dkov%C3%BD_7218.jpg"}],"sunda-clouded-leopard":[{"f":"p/a6bd1622.jpg","w":1024,"h":683,"by":"Manuel Ruedi","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/59450054","loc":"Sabah, Borneo"},{"f":"p/c1abccbd.jpg","w":1024,"h":680,"by":"Ben Tsai蔡維哲","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/64735753","loc":"Sabah, Borneo"},{"f":"p/8a264aa4.jpg","w":1024,"h":576,"by":"olliewearn","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/4500686","loc":"Sabah, Borneo"},{"f":"p/a12733fc.jpg","w":1024,"h":768,"by":"Premala Arulampalam","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/409897476","loc":"Sabah, Borneo"},{"f":"p/222999e4.jpg","w":1100,"h":827,"by":"Spencer Wright","lic":"CC BY 2.0","src":"https://commons.wikimedia.org/wiki/File:Clouded_leopard,_Cat_Survival_Trust_(4903773455).jpg"},{"f":"p/788e3a48.jpg","w":1024,"h":576,"by":"Royle Safaris","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/177808531","loc":"Sabah, Borneo"}],"asian-golden-cat":[{"f":"p/495a5890.jpg","w":1024,"h":620,"by":"vanaavi","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/45599485"},{"f":"p/c2baf6b6.jpg","w":1046,"h":1100,"by":"Karen Stout","lic":"CC BY-SA 2.0","src":"https://commons.wikimedia.org/wiki/File:Asian_Golden_cat.jpg"},{"f":"p/eb325128.jpg","w":960,"h":947,"by":"OpenCage","lic":"CC BY-SA 2.5","src":"https://commons.wikimedia.org/wiki/File:Catopuma_temminckii.jpg"},{"f":"p/19dc1340.jpg","w":1100,"h":825,"by":"Marie Hale","lic":"CC BY 2.0","src":"https://commons.wikimedia.org/wiki/File:Asian_golden_cat_at_Edinburgh_Zoo.jpg"},{"f":"p/b9976d88.jpg","w":582,"h":1100,"by":"Xocolatl ( talk ) 15:32, 29 November 2009 (UTC)","lic":"Public domain","src":"https://commons.wikimedia.org/wiki/File:HD_Goldkatze.jpg"},{"f":"p/b4300cc0.jpg","w":825,"h":1100,"by":"Sakurai Midori","lic":"CC BY 3.0","src":"https://commons.wikimedia.org/wiki/File:Catopuma_temminckii_Safari_Park_Cisarua.JPG"}],"bay-cat":[{"f":"p/417d7c59.jpg","w":1100,"h":778,"by":"*Bay_cat_1_Jim_Sanderson.jpg: Jim Sanderson *derivative work: Abujoy ( talk )","lic":"CC BY-SA 3.0","src":"https://commons.wikimedia.org/wiki/File:Bay_cat_1_Jim_Sanderson-cropped.jpg"},{"f":"p/11f40bca.jpg","w":966,"h":1100,"by":"Jim Sanderson","lic":"CC BY-SA 3.0","src":"https://commons.wikimedia.org/wiki/File:Bay_cat_1_Jim_Sanderson.jpg"}],"marbled-cat":[{"f":"p/f3b7ad37.jpg","w":1024,"h":672,"by":"robhutchinson","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/284996694"},{"f":"p/8f98daf6.jpg","w":1024,"h":768,"by":"Ben Ward","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/301350515"},{"f":"p/803e5213.jpg","w":1024,"h":768,"by":"Royle Safaris","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/173412136"},{"f":"p/23ffe9a8.jpg","w":1024,"h":927,"by":"Harsha Jayaramaiah","lic":"CC BY 4.0","src":"https://www.inaturalist.org/observations/172939439"},{"f":"p/b40eac74.jpg","w":1024,"h":683,"by":"James Eaton","lic":"CC0","src":"https://www.inaturalist.org/observations/193034809"},{"f":"p/4f533640.jpg","w":1024,"h":683,"by":"Katarina Wilson","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/203569524"}],"caracal":[{"f":"p/d78326dc.jpg","w":1024,"h":683,"by":"kinou66","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/59865046"},{"f":"p/8e1c935e.jpg","w":1024,"h":779,"by":"Gigi Laidler","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/61603580"},{"f":"p/3a959331.jpg","w":1024,"h":768,"by":"Christiaan Viljoen","lic":"CC BY 4.0","src":"https://www.inaturalist.org/observations/67701843"},{"f":"p/0f604360.jpg","w":1063,"h":1100,"by":"€ Van 3000 from belgium belgikske belgiquistan - United Tribes ov Europe","lic":"CC BY-SA 2.0","src":"https://commons.wikimedia.org/wiki/File:Caracal001.jpg"},{"f":"p/34673734.jpg","w":1100,"h":922,"by":"Habib M’henni","lic":"CC BY-SA 3.0","src":"https://commons.wikimedia.org/wiki/File:Caracl_(01),_Paris,_d%C3%A9cembre_2013.jpg"},{"f":"p/ecbeace5.jpg","w":1024,"h":768,"by":"Peter Archdale","lic":"CC BY 4.0","src":"https://www.inaturalist.org/observations/92943830"}],"serval":[{"f":"p/e9c1f59e.jpg","w":1024,"h":765,"by":"Wynand Uys","lic":"CC BY 4.0","src":"https://www.inaturalist.org/observations/10834746"},{"f":"p/84d4bfd9.jpg","w":1024,"h":683,"by":"Nik Borrow","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/213135017"},{"f":"p/194cdf90.jpg","w":962,"h":1024,"by":"Stuart Davis","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/336315971"},{"f":"p/02c40302.jpg","w":1100,"h":1020,"by":"datadan","lic":"CC BY 4.0","src":"https://commons.wikimedia.org/wiki/File:Leptailurus_serval_61666728,_crop.jpg"},{"f":"p/430df0a9.jpg","w":929,"h":1100,"by":"Bernard DUPONT","lic":"CC BY-SA 2.0","src":"https://commons.wikimedia.org/wiki/File:Serval_(Leptailurus_serval)_leaving_the_road_..._(50680561326).jpg"},{"f":"p/e7ee5a34.jpg","w":1024,"h":683,"by":"mikeloomis","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/19920648"},{"f":"p/e4980752.jpg","w":1024,"h":718,"by":"Stan Rullman","lic":"CC BY 4.0","src":"https://www.inaturalist.org/observations/18111053","cb":1,"note":"Curveball: a melanistic (black) serval"},{"f":"p/febde5b6.jpg","w":1024,"h":799,"by":"mikeloomis","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/195902889","cb":1,"note":"Curveball: a melanistic (black) serval"}],"african-golden-cat":[{"f":"p/cbe50c58.jpg","w":1024,"h":576,"by":"Xavier Rufray","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/141108157"},{"f":"p/257d1e48.jpg","w":852,"h":1024,"by":"ani-ggnp","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/387217067"},{"f":"p/54d38f54.jpg","w":945,"h":731,"by":"yannapis","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/339007752"},{"f":"p/b79e456d.jpg","w":1024,"h":641,"by":"ani-ggnp","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/387200540"},{"f":"p/09bd5c9f.jpg","w":1024,"h":576,"by":"ChimpAndSee","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/381086158"},{"f":"p/038535a4.jpg","w":1024,"h":768,"by":"Parc de la Lékédi","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/206594398"}],"ocelot":[{"f":"p/b73c79dd.jpg","w":1024,"h":1007,"by":"Robin Gwen Agarwal","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/126951576"},{"f":"p/3169f47f.jpg","w":1024,"h":595,"by":"Miguel Parejo","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/186896852"},{"f":"p/8e286965.jpg","w":1024,"h":683,"by":"hbook91","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/255474403"},{"f":"p/c7e0dca6.jpg","w":1024,"h":683,"by":"Royle Safaris","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/279233583"},{"f":"p/bd5151b3.jpg","w":1100,"h":848,"by":"João Carlos Medau","lic":"CC BY 2.0","src":"https://commons.wikimedia.org/wiki/File:Ocelot_(Jaguatirica)_Zoo_Itatiba.jpg"},{"f":"p/7c5c3a8d.jpg","w":880,"h":1100,"by":"Giles Laurent","lic":"CC BY-SA 4.0","src":"https://commons.wikimedia.org/wiki/File:080_Ocelot_in_Encontro_das_%C3%81guas_State_Park_Photo_by_Giles_Laurent.jpg"},{"f":"p/c8be6db5.jpg","w":1024,"h":768,"by":"rafasl","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/105674446"}],"margay":[{"f":"p/535750e8.jpg","w":1024,"h":683,"by":"leithallb","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/29549973"},{"f":"p/cf281341.jpg","w":1024,"h":768,"by":"Arthur Gomes","lic":"CC BY-NC-SA 4.0","src":"https://www.inaturalist.org/observations/198526806"},{"f":"p/b2edb145.jpg","w":1024,"h":682,"by":"José G. Martínez-Fonseca","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/279124806"},{"f":"p/282d5a1d.jpg","w":1024,"h":814,"by":"Giff Beaton","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/197001909"},{"f":"p/37b56cf9.jpg","w":1024,"h":768,"by":"Arenal Observatory Lodge & Spa","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/68407088"},{"f":"p/6cd1e850.jpg","w":1024,"h":683,"by":"Brady Reed","lic":"CC0","src":"https://www.inaturalist.org/observations/191790778"},{"f":"p/6a9d7316.jpg","w":1100,"h":825,"by":"Anderson cristiano hendgen","lic":"CC BY-SA 4.0","src":"https://commons.wikimedia.org/wiki/File:Parque_Estadual_do_Turvo_Anderson_Cristiano_Hendgen_(06).jpg"}],"northern-tiger-cat":[{"f":"p/d0faa752.jpg","w":920,"h":1024,"by":"Don Marsille","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/216797186","loc":"Colombia"},{"f":"p/37068161.jpg","w":1024,"h":656,"by":"George Armistead/Hillstar Nature","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/148345572","loc":"Colombia"},{"f":"p/d54927ac.jpg","w":1024,"h":768,"by":"Justin Walker","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/259482238","loc":"Colombia"},{"f":"p/d0460b3c.jpg","w":819,"h":1024,"by":"José Vinícius de Medeiros","lic":"CC BY-NC-SA 4.0","src":"https://www.inaturalist.org/observations/186353163","loc":"Rio Grande do Norte, Brazil"},{"f":"p/aaff63c5.jpg","w":1024,"h":683,"by":"Don Wellmann","lic":"CC0","src":"https://www.inaturalist.org/observations/180526383","loc":"Colombia"},{"f":"p/08b2e4f4.jpg","w":1024,"h":809,"by":"Fundacion ProAves","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/203834150","loc":"Tolima, Colombia"},{"f":"p/536ed27f.jpg","w":1024,"h":768,"by":"Jose Manuel","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/304083857","loc":"Colombia"}],"southern-tiger-cat":[{"f":"p/9a0495e6.jpg","w":1024,"h":699,"by":"hbackes","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/402762682","loc":"Santa Catarina, Brazil"},{"f":"p/7f2b724c.jpg","w":1024,"h":822,"by":"pimentavix","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/140915708","loc":"Minas Gerais, Brazil"},{"f":"p/48a2d4cc.jpg","w":1024,"h":768,"by":"LeandroVacchiano","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/71677135","loc":"São Paulo, Brazil"},{"f":"p/12bc31a4.jpg","w":1024,"h":681,"by":"sitiocotingalodge","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/285922458","loc":"São Paulo, Brazil"},{"f":"p/e6923e96.jpg","w":1024,"h":798,"by":"pimentavix","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/140915709","loc":"Minas Gerais, Brazil"},{"f":"p/16285664.jpg","w":880,"h":1100,"by":"Marcelo Figueiroa","lic":"CC BY-SA 4.0","src":"https://commons.wikimedia.org/wiki/File:Gato-do-mato-pequeno-REBIO_Municipal_da_Serra_do_Japi-Marcelo_Figueiroa(001).jpg"},{"f":"p/705a31a8.jpg","w":1024,"h":683,"by":"João Vitor Andriola","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/280526471","cb":1,"note":"Curveball: a melanistic (black) southern tiger cat","loc":"Paraná, Brazil"}],"geoffroys-cat":[{"f":"p/c38c255c.jpg","w":1024,"h":683,"by":"javiervillamil","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/222219735"},{"f":"p/a87c9a49.jpg","w":1024,"h":768,"by":"Diego Carús","lic":"CC0","src":"https://www.inaturalist.org/observations/17411405"},{"f":"p/98398d42.jpg","w":1024,"h":758,"by":"Ramiro Pereira Garbero","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/152787624"},{"f":"p/9459de09.jpg","w":1024,"h":820,"by":"Gabriel Delasala","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/282279148"},{"f":"p/d64e2190.jpg","w":733,"h":1100,"by":"Arjan Haverkamp","lic":"CC BY-SA 2.0","src":"https://commons.wikimedia.org/wiki/File:Geoffroy's_cat,_female.jpg"},{"f":"p/315c19f8.jpg","w":1100,"h":731,"by":"Charles Barilleaux","lic":"CC BY 2.0","src":"https://commons.wikimedia.org/wiki/File:Geoffroy's_Cat.jpg"},{"f":"p/1744af1b.jpg","w":1024,"h":768,"by":"María Zeta","lic":"CC BY 4.0","src":"https://www.inaturalist.org/observations/72799902","cb":1,"note":"Curveball: a melanistic (black) Geoffroy’s cat"}],"kodkod":[{"f":"p/7341a5e3.jpg","w":1024,"h":768,"by":"Denisse del Campo","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/73074602"},{"f":"p/dee82a61.jpg","w":1024,"h":683,"by":"Rodrigo Silva C","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/53693825"},{"f":"p/9ee8fca5.jpg","w":586,"h":1024,"by":"Clemente Vivanco","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/369056547"},{"f":"p/0644a9e6.jpg","w":960,"h":720,"by":"Jim Sanderson","lic":"CC BY-SA 3.0","src":"https://commons.wikimedia.org/wiki/File:Guigna_Jim_Sanderson.jpg"},{"f":"p/ccf40c65.jpg","w":1024,"h":768,"by":"Denisse del Campo","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/130506400"},{"f":"p/149c0b94.jpg","w":1024,"h":635,"by":"pfaucher","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/7538672","cb":1,"note":"Curveball: a melanistic (black) kodkod, a common form in the south"},{"f":"p/605b3701.jpg","w":1024,"h":821,"by":"Pablo Silva","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/67051182","cb":1,"note":"Curveball: a melanistic (black) kodkod, a common form in the south"}],"pampas-cat":[{"f":"p/543517ad.jpg","w":1024,"h":575,"by":"Franco Elgueta","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/94083941"},{"f":"p/3655f60e.jpg","w":1024,"h":768,"by":"Alicia","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/60520306"},{"f":"p/c95e69ed.jpg","w":1024,"h":640,"by":"Damián Ganime","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/326695613"},{"f":"p/b058a595.jpg","w":1100,"h":826,"by":"Hectonichus","lic":"CC BY-SA 4.0","src":"https://commons.wikimedia.org/wiki/File:Felidae_-_Leopardus_colocola_pajeros_(Pampas_cat).JPG"},{"f":"p/1685f7fc.jpg","w":1024,"h":757,"by":"KENNEDY BORGES","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/190203799"},{"f":"p/b8195e6d.jpg","w":1024,"h":683,"by":"Norton Santos","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/326352728"},{"f":"p/064b6425.jpg","w":768,"h":1024,"by":"Rocido Reyes","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/322329476"}],"andean-cat":[{"f":"p/c9943c85.jpg","w":960,"h":789,"by":"Jim Sanderson","lic":"CC BY-SA 3.0","src":"https://commons.wikimedia.org/wiki/File:Andean_cat_1_Jim_Sanderson.jpg"},{"f":"p/59bd8af7.jpg","w":825,"h":1100,"by":"NOIRLab/NSF/AURA","lic":"CC BY 4.0","src":"https://commons.wikimedia.org/wiki/File:Gato_Andino_(IMG-20260604-WA0032-CC).jpg"},{"f":"p/b4199009.jpg","w":910,"h":1100,"by":"NOIRLab/NSF/AURA","lic":"CC BY 4.0","src":"https://commons.wikimedia.org/wiki/File:Gato_Andino_(IMG-20260604-WA0017-CC).jpg"},{"f":"p/6941456f.jpg","w":1024,"h":768,"by":"cuyobirding","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/100508909"}],"eurasian-lynx":[{"f":"p/f0724e04.jpg","w":1024,"h":683,"by":"Julia Moning","lic":"CC BY 4.0","src":"https://www.inaturalist.org/observations/143728649"},{"f":"p/21abb78a.jpg","w":1024,"h":576,"by":"ZhenningLiu","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/198649095"},{"f":"p/9d901efc.jpg","w":1024,"h":683,"by":"Wildlife biologist - Dovchoo","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/134550874"},{"f":"p/115c9574.jpg","w":1024,"h":576,"by":"felixkaffka","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/253159851"},{"f":"p/58fa4db0.jpg","w":1100,"h":733,"by":"Unknown author","lic":"Public domain","src":"https://commons.wikimedia.org/wiki/File:Lynx_lynx-4.JPG"},{"f":"p/147e4b69.jpg","w":960,"h":949,"by":"Maarten (c)","lic":"CC BY-SA 2.0","src":"https://commons.wikimedia.org/wiki/File:Iparkatamotzaranuan.jpg"},{"f":"p/0284e48d.jpg","w":1024,"h":683,"by":"leekelai","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/317589579"}],"iberian-lynx":[{"f":"p/e88910c0.jpg","w":1024,"h":683,"by":"djoldham","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/319909658"},{"f":"p/e0886ad7.jpg","w":745,"h":1024,"by":"Jose Luis Cano","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/280619515"},{"f":"p/74018b3d.jpg","w":1024,"h":1006,"by":"CoDe83","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/187264913"},{"f":"p/be77f0bb.jpg","w":1024,"h":768,"by":"Franck Curk","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/333326050"},{"f":"p/ec222b3c.jpg","w":1024,"h":628,"by":"goncalofino","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/124767285"},{"f":"p/0927e34b.jpg","w":1024,"h":768,"by":"Nils","lic":"CC BY 4.0","src":"https://www.inaturalist.org/observations/111290125"},{"f":"p/ed3633d1.jpg","w":1024,"h":683,"by":"Gregoire Dubois","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/327423619"}],"canada-lynx":[{"f":"p/8c50b1a8.jpg","w":1024,"h":683,"by":"Anya Auerbach","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/200587711"},{"f":"p/ceb599f9.jpg","w":1024,"h":682,"by":"edporopat","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/341024002"},{"f":"p/ac2781f9.jpg","w":1024,"h":648,"by":"smithcreekfrog","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/119082864"},{"f":"p/6f1f32f3.jpg","w":1100,"h":866,"by":"kdee64 (Keith Williams)","lic":"CC BY 2.0","src":"https://commons.wikimedia.org/wiki/File:Canadian_lynx_by_Keith_Williams.jpg"},{"f":"p/cd6d2c2a.jpg","w":1024,"h":768,"by":"woodhaunt","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/93447624"},{"f":"p/8f048573.jpg","w":795,"h":1100,"by":"Michael Zahra","lic":"CC BY-SA 3.0","src":"https://commons.wikimedia.org/wiki/File:Canada_lynx_by_Michael_Zahra_(cropped).jpg"},{"f":"p/a9f034ed.jpg","w":1024,"h":769,"by":"Jonathan","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/16677667"}],"bobcat":[{"f":"p/a1209941.jpg","w":1024,"h":819,"by":"Tom Murray","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/261263038"},{"f":"p/bcaa6cf8.jpg","w":1100,"h":623,"by":"Don DeBold","lic":"CC BY-SA 2.0","src":"https://commons.wikimedia.org/wiki/File:Calero_Creek_Trail_Bobcat.jpg"},{"f":"p/5b20c1a2.jpg","w":1024,"h":683,"by":"Daniel George","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/5080154"},{"f":"p/df026520.jpg","w":736,"h":1100,"by":"Becker1999 (Paul and Cathy)","lic":"CC BY 2.0","src":"https://commons.wikimedia.org/wiki/File:Bobcat_at_Columbus_Zoo_Boo.jpg"},{"f":"p/f4f6dc16.jpg","w":1024,"h":768,"by":"deandsusan","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/4874518"},{"f":"p/8ecf95e7.jpg","w":1024,"h":576,"by":"Roberto González","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/19272250"},{"f":"p/dbfcd4c7.jpg","w":960,"h":720,"by":"Malcolm","lic":"CC BY-SA 2.0","src":"https://commons.wikimedia.org/wiki/File:Bobcat_at_Fort_Worth_Zoo.jpg"}],"puma":[{"f":"p/1bfdcf27.jpg","w":1024,"h":683,"by":"Jeff Bartlett","lic":"CC BY 4.0","src":"https://www.inaturalist.org/observations/94681545"},{"f":"p/4a3f8b95.jpg","w":1024,"h":708,"by":"NHMLA Community Science Program","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/5871195"},{"f":"p/fed24417.jpg","w":960,"h":640,"by":"Elaine R. Wilson","lic":"CC BY-SA 3.0","src":"https://commons.wikimedia.org/wiki/File:Mountain_Lion_(C).jpg"},{"f":"p/dca49bd9.jpg","w":1100,"h":869,"by":"Luis Miguel Bugallo Sánchez (Lmbuga)","lic":"CC BY-SA 3.0","src":"https://commons.wikimedia.org/wiki/File:Puma_concolor_stanleyana_-_Texas_Park_-_Lanzarote_-PC08_(cropped).jpg"},{"f":"p/f8479ee2.jpg","w":1100,"h":733,"by":"Bas Lammers","lic":"CC BY 2.0","src":"https://commons.wikimedia.org/wiki/File:Puma_face.jpg"},{"f":"p/df9ea56a.jpg","w":733,"h":1100,"by":"Carlos","lic":"CC BY 2.0","src":"https://commons.wikimedia.org/wiki/File:Puma_-_49044464307.jpg"},{"f":"p/7e2fac03.jpg","w":1024,"h":605,"by":"pfaucher","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/10054207"}],"jaguarundi":[{"f":"p/41e76d63.jpg","w":1024,"h":683,"by":"gabriel_arroyo","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/52468398"},{"f":"p/be14ba7b.jpg","w":1024,"h":768,"by":"Adeilson Melo","lic":"CC BY 4.0","src":"https://www.inaturalist.org/observations/177511641"},{"f":"p/becfb76c.jpg","w":1024,"h":768,"by":"COMUNA LAS BALSAS","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/74867652"},{"f":"p/ded42dd8.jpg","w":1024,"h":630,"by":"Connor Cochrane","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/320203337"},{"f":"p/0ca2c155.jpg","w":821,"h":1024,"by":"giana521","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/128397169"},{"f":"p/93ef7f41.jpg","w":1000,"h":750,"by":"Rosabel Miro","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/38818340"},{"f":"p/a2a96102.jpg","w":1024,"h":768,"by":"ig: @ferales__ ✨","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/65673148"}],"cheetah":[{"f":"p/3c41e66f.jpg","w":1024,"h":683,"by":"Callum Evans","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/92897554"},{"f":"p/34f1f907.jpg","w":1100,"h":733,"by":"Benh LIEU SONG","lic":"CC BY-SA 3.0","src":"https://commons.wikimedia.org/wiki/File:Hunting_Cheetah.jpg"},{"f":"p/fb4df2de.jpg","w":733,"h":1100,"by":"James Temple","lic":"CC BY 2.0","src":"https://commons.wikimedia.org/wiki/File:TheCheethcat.jpg"},{"f":"p/9d8ad682.jpg","w":1100,"h":993,"by":"William Warby","lic":"CC BY 2.0","src":"https://commons.wikimedia.org/wiki/File:Cheetah_portrait_Whipsnade_Zoo.jpg"},{"f":"p/c5957cf9.jpg","w":1100,"h":727,"by":"flowcomm","lic":"CC BY 2.0","src":"https://commons.wikimedia.org/wiki/File:Mosetlha,_Madikwe_Game_Reserve,_South_Africa_(48012186231).jpg"},{"f":"p/d172d677.jpg","w":1024,"h":683,"by":"janaohrner","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/13558790"},{"f":"p/8be0d5a8.jpg","w":1024,"h":770,"by":"Wayne and Pam Osborn","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/331972882"}],"leopard-cat":[{"f":"p/5fae06f9.jpg","w":1024,"h":683,"by":"karsten-schmale_alcinus-consulting","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/331787794","loc":"Mondulkiri, Cambodia"},{"f":"p/5fd7d92a.jpg","w":1024,"h":684,"by":"Utain Pummarin","lic":"CC BY 4.0","src":"https://www.inaturalist.org/observations/51208019","loc":"Nan, Thailand"},{"f":"p/2b555c92.jpg","w":1024,"h":1024,"by":"Munim Zabidi","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/30299992"},{"f":"p/5dd7c769.jpg","w":1024,"h":683,"by":"Rohit Chakravarty","lic":"CC BY-NC-SA 4.0","src":"https://www.inaturalist.org/observations/254015249","loc":"Uttarakhand, India"},{"f":"p/0f24cdf1.jpg","w":1024,"h":683,"by":"sandwich31","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/168453216","loc":"South Korea"},{"f":"p/960d5d31.jpg","w":733,"h":1100,"by":"Pontafon","lic":"CC BY-SA 3.0","src":"https://commons.wikimedia.org/wiki/File:Tsushima_Cat_001.jpg","loc":"Tsushima, Japan"}],"sunda-leopard-cat":[{"f":"p/5c90d55f.jpg","w":1024,"h":683,"by":"willbrooks","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/131153848","loc":"Sabah, Borneo"},{"f":"p/e3833664.jpg","w":1024,"h":768,"by":"Michał Górski","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/395429920","loc":"Sabah, Borneo"},{"f":"p/f0eed9da.jpg","w":1024,"h":683,"by":"Manuel Ruedi","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/67870082","loc":"East Java"},{"f":"p/5ba0dfed.jpg","w":1024,"h":549,"by":"Forest Botial-Jarvis","lic":"CC BY 4.0","src":"https://www.inaturalist.org/observations/32991013","loc":"West Java"},{"f":"p/0ba9203d.jpg","w":1024,"h":819,"by":"rupperrt78","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/150920473","loc":"Sabah, Borneo"},{"f":"p/7ce30cf8.jpg","w":1024,"h":947,"by":"johnlerond","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/236023885","loc":"Sabah, Borneo"}],"fishing-cat":[{"f":"p/57f01bec.jpg","w":1024,"h":585,"by":"pfaucher","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/8375840"},{"f":"p/5b6729ad.jpg","w":1024,"h":768,"by":"Tim Bawden","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/185720887"},{"f":"p/bb130e55.jpg","w":1024,"h":683,"by":"vsbmani","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/409658459"},{"f":"p/9f213058.jpg","w":1100,"h":734,"by":"Cliff","lic":"CC BY 2.0","src":"https://commons.wikimedia.org/wiki/File:Fishing_Cat_(Prionailurus_viverrinus)_3.jpg"},{"f":"p/302bf405.jpg","w":1040,"h":1100,"by":"Melina Kolburn","lic":"CC BY-SA 4.0","src":"https://commons.wikimedia.org/wiki/File:FishingCatDC.jpg"},{"f":"p/12f37d41.jpg","w":1024,"h":683,"by":"garyallport","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/338150177"},{"f":"p/f6691888.jpg","w":1100,"h":733,"by":"Shiny Things","lic":"CC BY 2.0","src":"https://commons.wikimedia.org/wiki/File:FishingCat-NightSafari-Singapore-20100110.jpg"}],"flat-headed-cat":[{"f":"p/2a8740e3.jpg","w":1024,"h":685,"by":"pfaucher","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/33197299"},{"f":"p/fca5f0f9.jpg","w":1024,"h":768,"by":"Thibaud Aronson","lic":"CC BY-SA 4.0","src":"https://www.inaturalist.org/observations/74063369"},{"f":"p/711d9ea9.jpg","w":1100,"h":733,"by":"Jim Sanderson","lic":"CC BY-SA 3.0","src":"https://commons.wikimedia.org/wiki/File:Flat-headed_cat_1_Jim_Sanderson.JPG"},{"f":"p/a90ffffd.jpg","w":1100,"h":733,"by":"Jim Sanderson","lic":"CC BY-SA 3.0","src":"https://commons.wikimedia.org/wiki/File:Flat-headed_cat_1_Jim_Sanderson_2.jpg"},{"f":"p/732b5ae4.jpg","w":1024,"h":688,"by":"roger_e_n_smith","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/402678078"},{"f":"p/ac9b678d.jpg","w":1024,"h":461,"by":"rillemalmstrom","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/244574363"}],"rusty-spotted-cat":[{"f":"p/18ce4c3b.jpg","w":1024,"h":768,"by":"anant73","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/407199162"},{"f":"p/d1a18919.jpg","w":1024,"h":683,"by":"metalquip","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/174328459"},{"f":"p/b83da276.jpg","w":1100,"h":825,"by":"NasserHalaweh","lic":"CC BY-SA 4.0","src":"https://commons.wikimedia.org/wiki/File:Felidae_Prionailurus_rubiginosus_phillipsi_3.jpg"},{"f":"p/8057cfb4.jpg","w":733,"h":1100,"by":"UrLunkwill","lic":"CC BY-SA 3.0","src":"https://commons.wikimedia.org/wiki/File:Rostkatze.JPG"},{"f":"p/4e4b0654.jpg","w":1024,"h":653,"by":"Rahulratan Chauhan","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/1702934"},{"f":"p/4fe07610.jpg","w":1024,"h":892,"by":"desertnaturalist","lic":"CC BY 4.0","src":"https://www.inaturalist.org/observations/411481038"},{"f":"p/60dc3428.jpg","w":1100,"h":733,"by":"Davidvraju","lic":"CC BY-SA 4.0","src":"https://commons.wikimedia.org/wiki/File:Rusty_spotted_cat_1.jpg"}],"pallass-cat":[{"f":"p/f283bc60.jpg","w":880,"h":1024,"by":"Phil Benstead","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/93258648"},{"f":"p/267a1d54.jpg","w":1024,"h":683,"by":"Karamjeet Singh","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/183083411"},{"f":"p/4a40d61e.jpg","w":1024,"h":575,"by":"David Thomas","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/104225408"},{"f":"p/c6ca3952.jpg","w":1024,"h":539,"by":"Wildlife biologist - Dovchoo","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/253394485"},{"f":"p/fa37c54c.jpg","w":1024,"h":751,"by":"vladimirblinov","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/300401149"},{"f":"p/6bcc3b4b.jpg","w":1100,"h":733,"by":"Scottmliddell","lic":"CC BY 2.0","src":"https://commons.wikimedia.org/wiki/File:Pallas_cat.JPG"},{"f":"p/f9125921.jpg","w":1100,"h":825,"by":"Alkhimov Maxim","lic":"CC BY 3.0","src":"https://commons.wikimedia.org/wiki/File:%D0%9C%D0%B0%D0%BD%D1%83%D0%BB_%D0%BF%D1%80%D0%BE%D0%BC%D0%BE%D0%BA_%D0%BF%D0%BE%D0%B4_%D0%B4%D0%BE%D0%B6%D0%B4%D1%91%D0%BC_-_panoramio.jpg"}],"domestic-cat":[{"f":"p/d62571d0.jpg","w":824,"h":1100,"by":"Alvesgaspar","lic":"CC BY-SA 3.0","src":"https://commons.wikimedia.org/wiki/File:Cat_November_2010-1a.jpg"},{"f":"p/c1f92095.jpg","w":1100,"h":733,"by":"Von.grzanka","lic":"CC BY-SA 3.0","src":"https://commons.wikimedia.org/wiki/File:Felis_catus-cat_on_snow.jpg"},{"f":"p/4022cac6.jpg","w":1100,"h":735,"by":"Горбунова М.С","lic":"CC BY-SA 4.0","src":"https://commons.wikimedia.org/wiki/File:Our_feral_cats_4.jpg"},{"f":"p/6d1c29c5.jpg","w":1100,"h":825,"by":"Khunkavin","lic":"CC BY-SA 4.0","src":"https://commons.wikimedia.org/wiki/File:Sleeping_cat_at_Mahidol_University_2023.jpg"},{"f":"p/19bd87fa.jpg","w":1100,"h":926,"by":"Keith Kissel","lic":"CC BY 2.0","src":"https://commons.wikimedia.org/wiki/File:June_odd-eyed-cat_cropped.jpg"},{"f":"p/c8c3721b.jpg","w":1100,"h":734,"by":"André Karwath aka Aka","lic":"CC BY-SA 2.5","src":"https://commons.wikimedia.org/wiki/File:Six_weeks_old_cat_(aka).jpg"},{"f":"p/1d1fc4bb.jpg","w":1024,"h":702,"by":"pfaucher","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/9527042"},{"f":"p/29da83fc.jpg","w":825,"h":1100,"by":"Banne27","lic":"CC BY 4.0","src":"https://commons.wikimedia.org/wiki/File:Gattec_10.jpg"}],"european-wildcat":[{"f":"p/09498d2f.jpg","w":1024,"h":576,"by":"Javisa Hun","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/25967594","loc":"Aragón, Spain"},{"f":"p/f19d9251.jpg","w":1024,"h":682,"by":"Museo di Storia Naturale della Maremma","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/29917767","loc":"Tuscany, Italy"},{"f":"p/482a4b2f.jpg","w":1024,"h":683,"by":"Daniel Eugenio Pérez Garrido","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/257471246"},{"f":"p/a0e0ff1a.jpg","w":1024,"h":684,"by":"virag93buranyi","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/108099004"},{"f":"p/afc5dbfa.jpg","w":1024,"h":684,"by":"virag93buranyi","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/108099005"},{"f":"p/b7eb8860.jpg","w":1024,"h":683,"by":"yotis","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/336807469","loc":"Central Macedonia, Greece"},{"f":"p/551393f6.jpg","w":1024,"h":1024,"by":"craigscribbles","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/247626054","loc":"Scottish Highlands"}],"african-wildcat":[{"f":"p/7c2e1aa1.jpg","w":1024,"h":740,"by":"copper","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/9809261","loc":"Kruger, South Africa"},{"f":"p/5e5580b0.jpg","w":1024,"h":682,"by":"Claudia Komesu","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/4527565","loc":"Kgalagadi, southern Africa"},{"f":"p/e0794ec8.jpg","w":1024,"h":683,"by":"Karim Haddad","lic":"CC BY 4.0","src":"https://www.inaturalist.org/observations/149849242","loc":"southern Algeria"},{"f":"p/bd581dc3.jpg","w":1100,"h":822,"by":"Justin Ponder","lic":"CC BY 4.0","src":"https://commons.wikimedia.org/wiki/File:Felis_lybica_270414532.jpg"},{"f":"p/5be198a2.jpg","w":682,"h":1100,"by":"Tony Rebelo","lic":"CC BY-SA 4.0","src":"https://commons.wikimedia.org/wiki/File:Felis_lybica_cafra_15213311.jpg"},{"f":"p/3aae0c19.jpg","w":1024,"h":679,"by":"Matt Muir","lic":"CC BY 4.0","src":"https://www.inaturalist.org/observations/34269874","loc":"Ngamiland, Botswana"},{"f":"p/f508ddc9.jpg","w":1024,"h":683,"by":"Avinash Bhagat","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/184031525","cb":1,"note":"Curveball: the spotted Asiatic form of the same species","loc":"Rajasthan, India"},{"f":"p/1c86569b.jpg","w":1024,"h":683,"by":"eshamunshi","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/93831273","cb":1,"note":"Curveball: the spotted Asiatic form of the same species","loc":"Rajasthan, India"}],"chinese-mountain-cat":[{"f":"p/594839ca.jpg","w":1024,"h":683,"by":"Royle Safaris","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/241465456"},{"f":"p/88b452aa.jpg","w":731,"h":1100,"by":"西宁野生动物园","lic":"CC BY-SA 3.0","src":"https://commons.wikimedia.org/wiki/File:Chinese_Mountain_Cat_(Felis_Bieti)_in_XiNing_Wild_Zoo_2.jpg"},{"f":"p/1a9c3df2.jpg","w":1000,"h":1000,"by":"stevewhitemk81","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/414698373"},{"f":"p/5e11ff5b.jpg","w":1024,"h":768,"by":"lunisolyn","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/363272885"},{"f":"p/816d1e27.jpg","w":1024,"h":754,"by":"Royle Safaris","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/170093000"},{"f":"p/cca105f3.jpg","w":997,"h":665,"by":"长尾山雀","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/358588910"}],"sand-cat":[{"f":"p/b3f2a783.jpg","w":1024,"h":603,"by":"pfaucher","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/24739107"},{"f":"p/aebcb524.jpg","w":945,"h":1100,"by":"ErRu","lic":"CC BY-SA 3.0","src":"https://commons.wikimedia.org/wiki/File:Felis_margarita_harrisoni_-_Sandkatze_SOM.jpg"},{"f":"p/a3b16fbe.jpg","w":1100,"h":792,"by":"Malene Thyssen","lic":"CC BY-SA 3.0","src":"https://commons.wikimedia.org/wiki/File:Sandkat1_(Felis_margarita).jpg"},{"f":"p/6266f4c5.jpg","w":1024,"h":768,"by":"Benoît Segerer","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/193745599"},{"f":"p/e6c29f25.jpg","w":1024,"h":717,"by":"Sheelagh Halsey","lic":"CC BY 4.0","src":"https://www.inaturalist.org/observations/32780692"},{"f":"p/5828a8ee.jpg","w":825,"h":1100,"by":"Greg Hume","lic":"CC BY-SA 3.0","src":"https://commons.wikimedia.org/wiki/File:SandCat12.jpg"},{"f":"p/39cdf150.jpg","w":1024,"h":683,"by":"Martin Fichtler","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/326660433"}],"black-footed-cat":[{"f":"p/894532dc.jpg","w":1024,"h":682,"by":"Niall Perrins","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/85199584"},{"f":"p/e07dcabf.jpg","w":728,"h":1100,"by":"Patrick Ch. Apfeld, derivative editing by Poke2001","lic":"CC BY 3.0","src":"https://commons.wikimedia.org/wiki/File:Zoo_Wuppertal_Schwarzfusskatze.jpg"},{"f":"p/61eddf2e.jpg","w":1100,"h":673,"by":"Ltshears","lic":"CC BY-SA 3.0","src":"https://commons.wikimedia.org/wiki/File:BlackFootedCat57.jpg"},{"f":"p/2b029360.jpg","w":1024,"h":662,"by":"Royle Safaris","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/168985332"},{"f":"p/ded0b754.jpg","w":1100,"h":880,"by":"Charles Barilleaux","lic":"CC BY 2.0","src":"https://commons.wikimedia.org/wiki/File:Standing_BFC_(8359398129).jpg"},{"f":"p/e298deba.jpg","w":1100,"h":865,"by":"Ltshears","lic":"CC BY-SA 3.0","src":"https://commons.wikimedia.org/wiki/File:BlackFootedCat56.jpg"}],"jungle-cat":[{"f":"p/f5426c27.jpg","w":1024,"h":740,"by":"Sunny Joseph","lic":"CC BY 4.0","src":"https://www.inaturalist.org/observations/232891836"},{"f":"p/e83653a6.jpg","w":1024,"h":683,"by":"Wildlife SOS","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/238284038"},{"f":"p/0c735b4d.jpg","w":1024,"h":683,"by":"Ramesh Shenai","lic":"CC BY 4.0","src":"https://www.inaturalist.org/observations/142053263"},{"f":"p/fcbc2bd4.jpg","w":1024,"h":683,"by":"Uday Agashe","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/56021817"},{"f":"p/ab96319d.jpg","w":960,"h":833,"by":"Shino jacob koottanad","lic":"CC BY-SA 4.0","src":"https://commons.wikimedia.org/wiki/File:Screenshot_20230306_130808_Gallery.jpg"},{"f":"p/15ea1d39.jpg","w":1024,"h":768,"by":"Ashwin Viswanathan","lic":"CC BY 4.0","src":"https://www.inaturalist.org/observations/96109818"},{"f":"p/5920b207.jpg","w":1024,"h":683,"by":"peterbijlmakers","lic":"CC BY-NC 4.0","src":"https://www.inaturalist.org/observations/392587164","cb":1,"note":"Curveball: a melanistic (black) jungle cat"}]},"thumbs":{"lion":"t/087ea6f1.jpg","tiger":"t/70aa7c53.jpg","leopard":"t/aa17d1d2.jpg","jaguar":"t/3eee0b81.jpg","snow-leopard":"t/39c4cde9.jpg","clouded-leopard":"t/8544a82b.jpg","sunda-clouded-leopard":"t/222999e4.jpg","asian-golden-cat":"t/c2baf6b6.jpg","bay-cat":"t/417d7c59.jpg","marbled-cat":"t/f3b7ad37.jpg","caracal":"t/0f604360.jpg","serval":"t/e9c1f59e.jpg","african-golden-cat":"t/257d1e48.jpg","ocelot":"t/b73c79dd.jpg","margay":"t/37b56cf9.jpg","northern-tiger-cat":"t/d0faa752.jpg","southern-tiger-cat":"t/7f2b724c.jpg","geoffroys-cat":"t/a87c9a49.jpg","kodkod":"t/dee82a61.jpg","pampas-cat":"t/543517ad.jpg","andean-cat":"t/c9943c85.jpg","eurasian-lynx":"t/58fa4db0.jpg","iberian-lynx":"t/74018b3d.jpg","canada-lynx":"t/ac2781f9.jpg","bobcat":"t/df026520.jpg","puma":"t/f8479ee2.jpg","jaguarundi":"t/becfb76c.jpg","cheetah":"t/9d8ad682.jpg","leopard-cat":"t/5fae06f9.jpg","sunda-leopard-cat":"t/f0eed9da.jpg","fishing-cat":"t/9f213058.jpg","flat-headed-cat":"t/a90ffffd.jpg","rusty-spotted-cat":"t/18ce4c3b.jpg","pallass-cat":"t/6bcc3b4b.jpg","domestic-cat":"t/d62571d0.jpg","european-wildcat":"t/afc5dbfa.jpg","african-wildcat":"t/7c2e1aa1.jpg","chinese-mountain-cat":"t/88b452aa.jpg","sand-cat":"t/6266f4c5.jpg","black-footed-cat":"t/e07dcabf.jpg","jungle-cat":"t/f5426c27.jpg"}}</script>
+<script>
+/* Every Cat in the World: species data.
+   List: IUCN Cat Specialist Group, "A revised taxonomy of the Felidae" (2017): 41 living species.
+   Sizes and Red List status: Wikipedia "List of felids" (read November 2026).
+   Lineage split dates: Johnson et al. 2006, Science 311:73. */
+(function (root) {
+  const LINES = [
+    { id: 'panthera', name: 'Panthera line', short: 'Panthera', color: 1, mya: 10.8,
+      blurb: 'The roaring big cats and the two clouded leopards. First branch to split from the rest, about 10.8 million years ago.' },
+    { id: 'bay', name: 'Bay cat line', short: 'Bay cat', color: 2, mya: 9.4,
+      blurb: 'Three forest cats of Southeast Asia. Split about 9.4 million years ago.' },
+    { id: 'caracal', name: 'Caracal line', short: 'Caracal', color: 3, mya: 8.5,
+      blurb: 'Africa’s mid-sized cats. Split about 8.5 million years ago.' },
+    { id: 'ocelot', name: 'Ocelot line', short: 'Ocelot', color: 4, mya: 8.0,
+      blurb: 'The small spotted cats of Latin America. Split about 8 million years ago.' },
+    { id: 'lynx', name: 'Lynx line', short: 'Lynx', color: 5, mya: 7.2,
+      blurb: 'Bob-tailed, tuft-eared cats of the north. Split about 7.2 million years ago.' },
+    { id: 'puma', name: 'Puma line', short: 'Puma', color: 6, mya: 6.7,
+      blurb: 'An odd trio: puma, jaguarundi and cheetah. Split about 6.7 million years ago.' },
+    { id: 'leopardcat', name: 'Leopard cat line', short: 'Leopard cat', color: 7, mya: 6.2,
+      blurb: 'Small cats of Asia, plus Pallas’s cat. Parted from the domestic cat line about 6.2 million years ago.' },
+    { id: 'domestic', name: 'Domestic cat line', short: 'Domestic cat', color: 8, mya: 6.2,
+      blurb: 'The house cat and its closest wild relatives. Parted from the leopard cat line about 6.2 million years ago.' }
+  ];
+
+  /* tier: 1 = famous, 2 = enthusiast, 3 = deep cut.
+     hb / tail: head-and-body and tail length in cm.
+     tells: field marks, written so none of them contains the cat's own full name.
+     hint: shown with photos of cats that cannot be separated from a twin by looks alone. */
+  const CATS = [
+    // ---------- Panthera line ----------
+    { id: 'lion', name: 'Lion', sci: 'Panthera leo', line: 'panthera', tier: 1, regions: ['africa', 'asia'],
+      where: 'Sub-Saharan Africa, plus one last Asian population around Gir Forest in India',
+      hb: [137, 250], tail: [60, 100], status: 'VU',
+      also: ['African lion', 'Asiatic lion'],
+      accept: ['lioness', 'african lion', 'asiatic lion', 'asian lion', 'indian lion', 'barbary lion', 'white lion'],
+      tells: ['Plain tawny coat with no spots or stripes on adults', 'Tail ends in a dark tuft, which no other cat has', 'Males grow a mane; the only cat that lives in prides'],
+      note: 'African and Asiatic lions are one species. A white lion is a colour form, not a separate cat.' },
+    { id: 'tiger', name: 'Tiger', sci: 'Panthera tigris', line: 'panthera', tier: 1, regions: ['asia'],
+      where: 'India and Southeast Asia to the Russian Far East, plus Sumatra',
+      hb: [150, 230], tail: [90, 110], status: 'EN',
+      also: ['Bengal tiger', 'Siberian (Amur) tiger', 'Sumatran tiger'],
+      accept: ['tigress', 'bengal tiger', 'siberian tiger', 'amur tiger', 'sumatran tiger', 'indochinese tiger', 'malayan tiger', 'south china tiger', 'indian tiger', 'white tiger', 'royal bengal tiger'],
+      tells: ['The only big cat with stripes: black on orange, white underneath', 'A white spot on the back of each black ear', 'Biggest cat alive'],
+      note: 'Siberian (Amur), Bengal, Sumatran, Indochinese, Malayan and South China tigers are all this one species. A white tiger is a colour form of the Bengal tiger.' },
+    { id: 'leopard', name: 'Leopard', sci: 'Panthera pardus', line: 'panthera', tier: 1, regions: ['africa', 'asia'],
+      where: 'Africa and Asia, from the Cape to the Russian Far East',
+      hb: [91, 191], tail: [51, 101], status: 'VU',
+      also: ['African leopard', 'Amur leopard', 'Indian leopard'],
+      accept: ['african leopard', 'indian leopard', 'amur leopard', 'persian leopard', 'arabian leopard', 'sri lankan leopard', 'javan leopard', 'indochinese leopard', 'north china leopard', 'far eastern leopard', 'common leopard'],
+      tells: ['Rosettes are empty rings with nothing inside them', 'Long tail and a slim, long-bodied build', 'Often up a tree, with its kill hauled into the branches'],
+      note: 'A black panther in Africa or Asia is a melanistic leopard. In good light the rosettes still show.' },
+    { id: 'jaguar', name: 'Jaguar', sci: 'Panthera onca', line: 'panthera', tier: 1, regions: ['americas'],
+      where: 'Mexico to northern Argentina, with the most in the Amazon and Pantanal',
+      hb: [110, 170], tail: [44, 80], status: 'NT',
+      accept: ['black jaguar', 'onca', 'yaguar'],
+      tells: ['Rosettes are big and blocky, with small spots inside them', 'Barrel chest, short legs, and a huge head and jaw', 'Tail is short for a big cat'],
+      note: 'A black panther in the Americas is a melanistic jaguar.' },
+    { id: 'snow-leopard', name: 'Snow leopard', sci: 'Panthera uncia', line: 'panthera', tier: 1, regions: ['asia'],
+      where: 'High mountains of Central Asia: Himalaya, Tibet, Tien Shan, Altai',
+      hb: [90, 120], tail: [80, 100], status: 'VU',
+      also: ['Ounce'],
+      accept: ['ounce', 'uncia uncia'],
+      tells: ['Smoky grey-white coat with large, open, blurry rosettes', 'Tail almost as long as the body, and thick as a scarf', 'Small rounded ears, wide paws, pale grey-green eyes'] },
+    { id: 'clouded-leopard', name: 'Clouded leopard', sci: 'Neofelis nebulosa', line: 'panthera', tier: 2, regions: ['asia'],
+      where: 'Himalayan foothills through mainland Southeast Asia to southern China',
+      hb: [69, 108], tail: [61, 91], status: 'VU',
+      also: ['Mainland clouded leopard'],
+      accept: ['mainland clouded leopard', 'indochinese clouded leopard'],
+      tells: ['Big cloud-shaped blotches, each with a dark rear edge', 'Very long tail and short legs: a cat built for trees', 'Longest canine teeth for its size of any living cat'],
+      hint: 'Mainland Asia' },
+    { id: 'sunda-clouded-leopard', name: 'Sunda clouded leopard', sci: 'Neofelis diardi', line: 'panthera', tier: 3, regions: ['asia'],
+      where: 'Borneo and Sumatra only',
+      hb: [69, 108], tail: [61, 91], status: 'VU',
+      also: ['Sundaland clouded leopard', 'Diard’s clouded leopard'],
+      accept: ['sundaland clouded leopard', 'diards clouded leopard', 'diard clouded leopard', 'bornean clouded leopard', 'borneo clouded leopard', 'sumatran clouded leopard', 'enkuli clouded leopard', 'sunda clouded'],
+      tells: ['Clouds are smaller and darker than the mainland cat’s, each packed with small spots', 'Greyer coat, with a double stripe down the spine', 'Lives only on Borneo and Sumatra; named a species in 2006'],
+      hint: 'Borneo or Sumatra' },
+
+    // ---------- Bay cat line ----------
+    { id: 'asian-golden-cat', name: 'Asian golden cat', sci: 'Catopuma temminckii', line: 'bay', tier: 2, regions: ['asia'],
+      where: 'Eastern Himalaya, southern China and Southeast Asia down to Sumatra',
+      hb: [71, 105], tail: [40, 56], status: 'VU',
+      also: ['Temminck’s cat', 'Asiatic golden cat'],
+      accept: ['asiatic golden cat', 'temmincks cat', 'temminck cat', 'temmincks golden cat', 'fire cat'],
+      tells: ['Plain coat, usually fox-red; some are grey, black or boldly spotted', 'White stripes edged in black across the cheeks and up over the forehead', 'Underside of the tail tip is white'] },
+    { id: 'bay-cat', name: 'Bay cat', sci: 'Catopuma badia', line: 'bay', tier: 3, regions: ['asia'],
+      where: 'Borneo only',
+      hb: [53, 67], tail: [32, 40], status: 'EN',
+      also: ['Borneo bay cat', 'Bornean bay cat'],
+      accept: ['borneo bay cat', 'bornean bay cat', 'bornean cat', 'borneo cat', 'bornean red cat'],
+      tells: ['Plain chestnut-red coat (a few are grey), about house-cat size', 'Small round head with a dark stripe rising from the inner corner of each eye', 'Long tail with a white streak under the tip; one of the least-photographed cats on Earth'] },
+    { id: 'marbled-cat', name: 'Marbled cat', sci: 'Pardofelis marmorata', line: 'bay', tier: 3, regions: ['asia'],
+      where: 'Eastern Himalaya through Southeast Asia to Borneo and Sumatra',
+      hb: [45, 62], tail: [36, 55], status: 'NT',
+      tells: ['Looks like a clouded leopard shrunk to house-cat size', 'Round head, and dark-edged marbled blotches along the flanks', 'Very long, bushy tail, about as long as its body, carried straight out'] },
+
+    // ---------- Caracal line ----------
+    { id: 'caracal', name: 'Caracal', sci: 'Caracal caracal', line: 'caracal', tier: 1, regions: ['africa', 'asia'],
+      where: 'Africa, the Middle East, Central Asia and India',
+      hb: [80, 100], tail: [20, 34], status: 'LC',
+      also: ['Desert lynx', 'Rooikat'],
+      accept: ['desert lynx', 'persian lynx', 'african lynx', 'rooikat', 'karakal'],
+      tells: ['Plain reddish-tan coat with no spots', 'Long black tassels on black-backed ears', 'Long legs and a short tail, but no cheek ruff'],
+      note: 'Often called the desert lynx, but it is not a lynx. Its name comes from the Turkish for “black ear”.' },
+    { id: 'serval', name: 'Serval', sci: 'Leptailurus serval', line: 'caracal', tier: 1, regions: ['africa'],
+      where: 'Sub-Saharan Africa, in tall grass and wetland edges',
+      hb: [59, 100], tail: [20, 38], status: 'LC',
+      accept: ['serval cat', 'african serval'],
+      tells: ['Biggest ears and longest legs for its size of any cat', 'Bold black spots that merge into stripes down the neck and shoulders', 'Small head and a short, ringed tail'],
+      note: 'The Savannah breed of house cat is a serval cross.' },
+    { id: 'african-golden-cat', name: 'African golden cat', sci: 'Caracal aurata', line: 'caracal', tier: 3, regions: ['africa'],
+      where: 'Rainforests of West and Central Africa',
+      hb: [65, 90], tail: [28, 35], status: 'VU',
+      accept: ['profelis aurata', 'golden cat of africa'],
+      tells: ['Plain coat, red-brown or grey, often with spots on the belly and inner legs', 'Small round head, heavy muzzle, small rounded ears without tufts', 'Africa’s only forest-bound cat; nearly every photo of it is a camera-trap shot'] },
+
+    // ---------- Ocelot line ----------
+    { id: 'ocelot', name: 'Ocelot', sci: 'Leopardus pardalis', line: 'ocelot', tier: 1, regions: ['americas'],
+      where: 'South Texas and Mexico to northern Argentina',
+      hb: [50, 102], tail: [30, 50], status: 'LC',
+      accept: ['dwarf leopard', 'painted leopard', 'ocelote'],
+      tells: ['Spots run together into long, chain-like streaks along the body', 'Stocky and about twice the weight of a house cat, with big front paws', 'Shortish ringed tail and two black stripes on each cheek'] },
+    { id: 'margay', name: 'Margay', sci: 'Leopardus wiedii', line: 'ocelot', tier: 2, regions: ['americas'],
+      where: 'Forests from Mexico to Uruguay',
+      hb: [46, 69], tail: [23, 52], status: 'NT',
+      accept: ['tree ocelot', 'margay cat'],
+      tells: ['Huge dark eyes in a small round head', 'Very long, thick tail: well over half its body length', 'Lives in trees, and can swivel its ankles to climb down head-first'] },
+    { id: 'northern-tiger-cat', name: 'Northern tiger cat', label: 'Northern tiger cat (oncilla)', sci: 'Leopardus tigrinus', line: 'ocelot', tier: 3, regions: ['americas'],
+      where: 'Costa Rica and the Andes across northern South America to central Brazil',
+      hb: [38, 59], tail: [20, 42], status: 'VU',
+      also: ['Oncilla', 'Tigrina', 'Little spotted cat'],
+      accept: ['oncilla', 'northern tigrina', 'northern oncilla', 'northern tigercat', 'little spotted cat'],
+      tells: ['Smallest of the ocelot look-alikes: lighter than a house cat', 'Small open rosettes and dots on a slim body, with a narrow muzzle', 'Thin tail, and ears that look big on its small head'],
+      hint: 'Northern South America or Central America' },
+    { id: 'southern-tiger-cat', name: 'Southern tiger cat', sci: 'Leopardus guttulus', line: 'ocelot', tier: 3, regions: ['americas'],
+      where: 'Atlantic Forest of southern Brazil, Paraguay and north-east Argentina',
+      hb: [38, 59], tail: [20, 42], status: 'VU',
+      also: ['Southern tigrina', 'Atlantic Forest tiger cat'],
+      accept: ['southern tigrina', 'southern oncilla', 'southern tigercat', 'atlantic forest tiger cat', 'southern little spotted cat'],
+      tells: ['All but identical to its northern twin; split from it in 2013 on DNA evidence', 'Slightly darker, with bolder, thicker-rimmed rosettes and a thicker tail', 'Location is the reliable tell: the Atlantic Forest of southern Brazil'],
+      hint: 'Atlantic Forest, southern Brazil' },
+    { id: 'geoffroys-cat', name: 'Geoffroy’s cat', sci: 'Leopardus geoffroyi', line: 'ocelot', tier: 3, regions: ['americas'],
+      where: 'Southern South America, from Bolivia to Patagonia',
+      hb: [43, 88], tail: [23, 40], status: 'LC',
+      accept: ['geoffroy cat', 'geoffroys cat', 'geoffreys cat', 'geoffrey cat', 'geoffroy s cat'],
+      tells: ['Peppered evenly with small, solid black spots rather than rosettes', 'House-cat size; coat is grey in the south and tawny in the north', 'Stands up on its hind legs to look around'] },
+    { id: 'kodkod', name: 'Kodkod', label: 'Kodkod (guiña)', sci: 'Leopardus guigna', line: 'ocelot', tier: 3, regions: ['americas'],
+      where: 'Central and southern Chile, and a sliver of Argentina',
+      hb: [37, 56], tail: [20, 25], status: 'LC',
+      also: ['Guiña'],
+      accept: ['guina', 'guigna', 'huina', 'chilean cat', 'kod kod', 'codcod'],
+      tells: ['Smallest cat in the Americas: about half the weight of a house cat', 'Small round head, low-set ears, short legs and big feet', 'Short, thick, bushy ringed tail; dark spots on a buff-brown coat'] },
+    { id: 'pampas-cat', name: 'Pampas cat', label: 'Pampas cat (colocolo)', sci: 'Leopardus colocola', line: 'ocelot', tier: 3, regions: ['americas'],
+      where: 'Grassland, scrub and mountains from Ecuador to Patagonia',
+      hb: [42, 79], tail: [22, 33], status: 'NT',
+      also: ['Colocolo', 'Pantanal cat'],
+      accept: ['colocolo', 'colo colo', 'pantanal cat', 'pampas', 'leopardus colocolo', 'leopardus pajeros', 'grass cat'],
+      tells: ['Long shaggy fur, with a crest of longer hair down the spine', 'Bold dark bands around the legs; the body runs from plain grey to rusty streaks', 'Pointed ears, pink nose, shortish bushy tail'] },
+    { id: 'andean-cat', name: 'Andean cat', sci: 'Leopardus jacobita', line: 'ocelot', tier: 3, regions: ['americas'],
+      where: 'High Andes above the treeline in Peru, Bolivia, Chile and Argentina',
+      hb: [57, 65], tail: [41, 48], status: 'EN',
+      also: ['Andean mountain cat'],
+      accept: ['andean mountain cat', 'andes cat', 'andes mountain cat', 'gato andino'],
+      tells: ['Ash-grey coat with rusty-brown blotches and stripes', 'Very long, thick tail with wide dark rings: about two-thirds of its body length', 'Black nose, where the pampas cat’s is pink; hunts viscachas among the rocks'] },
+
+    // ---------- Lynx line ----------
+    { id: 'eurasian-lynx', name: 'Eurasian lynx', sci: 'Lynx lynx', line: 'lynx', tier: 2, regions: ['europe', 'asia'],
+      where: 'Forests from Scandinavia and the Alps across Russia to Tibet',
+      hb: [90, 120], tail: [19, 23], status: 'LC',
+      accept: ['european lynx', 'northern lynx', 'siberian lynx', 'common lynx', 'carpathian lynx', 'balkan lynx', 'eurasian'],
+      tells: ['Biggest of its group: tall, long-legged, about labrador size', 'Coat runs from plain to heavily spotted; short tail with a solid black tip', 'Black ear tufts and a ruff around the face'] },
+    { id: 'iberian-lynx', name: 'Iberian lynx', sci: 'Lynx pardinus', line: 'lynx', tier: 2, regions: ['europe'],
+      where: 'Spain and Portugal only',
+      hb: [65, 92], tail: [11, 16], status: 'VU',
+      accept: ['spanish lynx', 'pardel lynx', 'iberian'],
+      tells: ['Heavily spotted tawny coat, the most leopard-like of its group', 'Long “beard”: a pointed black-and-white ruff hanging below the jaw', 'About half the weight of its Eurasian cousin; back from under 100 animals in 2002'] },
+    { id: 'canada-lynx', name: 'Canada lynx', sci: 'Lynx canadensis', line: 'lynx', tier: 2, regions: ['americas'],
+      where: 'Canada, Alaska and the northern edge of the lower 48 states',
+      hb: [73, 106], tail: [10, 15], status: 'LC',
+      accept: ['canadian lynx', 'north american lynx', 'canada'],
+      tells: ['Enormous furry snowshoe paws, and hind legs longer than the front', 'Tail tip is black all the way round, as if dipped in ink', 'Long black ear tufts; frosted grey coat with little spotting'] },
+    { id: 'bobcat', name: 'Bobcat', sci: 'Lynx rufus', line: 'lynx', tier: 1, regions: ['americas'],
+      where: 'Southern Canada through the United States to Mexico',
+      hb: [50, 120], tail: [9, 25], status: 'LC',
+      also: ['Bay lynx', 'Red lynx'],
+      accept: ['bay lynx', 'red lynx', 'bob cat'],
+      tells: ['Short “bobbed” tail: black bars on top, white underneath at the tip', 'Shorter ear tufts and smaller paws than its northern cousin', 'More spots and leg bars; at home in desert, swamp and suburb'] },
+
+    // ---------- Puma line ----------
+    { id: 'puma', name: 'Puma', label: 'Puma (cougar, mountain lion)', sci: 'Puma concolor', line: 'puma', tier: 1, regions: ['americas'],
+      where: 'Western Canada to the tip of South America, with a small population in Florida',
+      hb: [100, 150], tail: [60, 90], status: 'LC',
+      also: ['Cougar', 'Mountain lion', 'Catamount', 'Florida panther'],
+      accept: ['cougar', 'mountain lion', 'catamount', 'florida panther', 'american lion', 'painter', 'mountain screamer', 'red tiger', 'deer tiger', 'felis concolor', 'cougars'],
+      tells: ['Plain tawny coat with no pattern on adults', 'Small round head; pale muzzle framed by black patches', 'Long, thick tail with a black tip and no tuft'],
+      note: 'Cougar, mountain lion, catamount and Florida panther are all this one cat. Guinness World Records lists it as the animal with the most names.' },
+    { id: 'jaguarundi', name: 'Jaguarundi', sci: 'Herpailurus yagouaroundi', line: 'puma', tier: 2, regions: ['americas'],
+      where: 'Mexico to central Argentina',
+      hb: [49, 78], tail: [28, 59], status: 'NT',
+      also: ['Eyra'],
+      accept: ['eyra', 'eyra cat', 'yaguarundi', 'jaguarondi', 'otter cat', 'puma yagouaroundi', 'jaguarundi cat'],
+      tells: ['Shaped more like an otter or weasel than a cat: long body, short legs', 'Small flat head with small round ears', 'Coat has no markings at all, and is either dark grey-brown or fox-red'] },
+    { id: 'cheetah', name: 'Cheetah', sci: 'Acinonyx jubatus', line: 'puma', tier: 1, regions: ['africa', 'asia'],
+      where: 'Eastern and southern Africa, with a tiny remnant in Iran',
+      hb: [113, 140], tail: [60, 84], status: 'VU',
+      accept: ['king cheetah', 'asiatic cheetah', 'african cheetah', 'hunting leopard', 'cheeta', 'chetah'],
+      tells: ['Solid round black spots, never rosettes', 'Black “tear lines” running from the inner eye to the mouth', 'Greyhound build: small head, deep chest, narrow waist, long legs'],
+      note: 'The king cheetah, with blotches and stripes, is a rare coat mutation of this species.' },
+
+    // ---------- Leopard cat line ----------
+    { id: 'leopard-cat', name: 'Leopard cat', sci: 'Prionailurus bengalensis', line: 'leopardcat', tier: 2, regions: ['asia'],
+      where: 'Mainland Asia from Pakistan and India to the Russian Far East, plus Taiwan and two Japanese islands',
+      hb: [45, 65], tail: [20, 30], status: 'LC',
+      also: ['Mainland leopard cat', 'Amur leopard cat', 'Iriomote cat', 'Tsushima cat'],
+      accept: ['mainland leopard cat', 'asian leopard cat', 'amur leopard cat', 'iriomote cat', 'tsushima cat', 'tsushima leopard cat', 'far eastern forest cat', 'amur forest cat'],
+      tells: ['Slim, leggy and house-cat sized, with bold black spots', 'Two dark stripes run from the eyes back over the crown; white streaks beside the nose', 'Wild ancestor behind the Bengal breed of house cat'],
+      hint: 'Mainland Asia' },
+    { id: 'sunda-leopard-cat', name: 'Sunda leopard cat', sci: 'Prionailurus javanensis', line: 'leopardcat', tier: 3, regions: ['asia'],
+      where: 'Java, Bali, Borneo, Sumatra and the western Philippines',
+      hb: [45, 65], tail: [20, 30], status: 'NE',
+      also: ['Javan leopard cat', 'Visayan leopard cat'],
+      accept: ['javan leopard cat', 'sundaland leopard cat', 'visayan leopard cat', 'bornean leopard cat', 'sumatran leopard cat', 'palawan leopard cat', 'sunda leopard'],
+      tells: ['Split from its mainland twin in 2017 on DNA evidence', 'Usually a little smaller, with smaller and finer spots', 'Location is the reliable tell: the Sunda islands and the Philippines'],
+      hint: 'Sunda islands or the Philippines' },
+    { id: 'fishing-cat', name: 'Fishing cat', sci: 'Prionailurus viverrinus', line: 'leopardcat', tier: 2, regions: ['asia'],
+      where: 'Wetlands and mangroves of South and Southeast Asia',
+      hb: [65, 85], tail: [25, 30], status: 'VU',
+      accept: ['fisher cat', 'fishing'],
+      tells: ['Stocky and deep-chested, about twice a house cat, with a short tail', 'Olive-grey coat with rows of dark spots, and stripes over the head', 'Small rounded ears set low; swims well and dives after fish'] },
+    { id: 'flat-headed-cat', name: 'Flat-headed cat', sci: 'Prionailurus planiceps', line: 'leopardcat', tier: 3, regions: ['asia'],
+      where: 'Lowland swamps of the Malay Peninsula, Sumatra and Borneo',
+      hb: [45, 52], tail: [13, 17], status: 'EN',
+      accept: ['flathead cat', 'flat head cat', 'flatheaded cat', 'flat headed'],
+      tells: ['Long, flattened skull with small ears set low on the sides', 'Big, close-set eyes, and white streaks beside the nose', 'Reddish-brown head, short tail, short legs; smaller than a house cat'] },
+    { id: 'rusty-spotted-cat', name: 'Rusty-spotted cat', sci: 'Prionailurus rubiginosus', line: 'leopardcat', tier: 2, regions: ['asia'],
+      where: 'India, Sri Lanka and the lowlands of Nepal',
+      hb: [35, 48], tail: [20, 25], status: 'NT',
+      accept: ['rusty spotted', 'rusty cat', 'rusty spot cat', 'rustyspotted cat'],
+      tells: ['Smallest wild cat in the world: an adult can weigh about 1 kg', 'Grey coat with rows of rust-brown spots', 'Huge eyes, with white streaks along their inner edges and dark lines over the head'] },
+    { id: 'pallass-cat', name: 'Pallas’s cat', label: 'Pallas’s cat (manul)', sci: 'Otocolobus manul', line: 'leopardcat', tier: 2, regions: ['asia'],
+      where: 'Cold steppe and rocky slopes of Central Asia, Mongolia and Tibet',
+      hb: [46, 65], tail: [21, 31], status: 'LC',
+      also: ['Manul'],
+      accept: ['manul', 'pallas cat', 'pallass cat', 'pallas s cat', 'palas cat', 'pallases cat', 'steppe cat', 'felis manul'],
+      tells: ['Flat, wide face with round ears set low on the sides of the head', 'Longest, densest fur of any cat, so it looks far heavier than it is', 'Round pupils rather than slits; dark cheek stripes; black-ringed tail'] },
+
+    // ---------- Domestic cat line ----------
+    { id: 'domestic-cat', name: 'Domestic cat', sci: 'Felis catus', line: 'domestic', tier: 1, regions: [],
+      where: 'Everywhere people live',
+      hb: [46, 46], tail: [30, 30], status: 'NE',
+      also: ['House cat'],
+      accept: ['house cat', 'housecat', 'cat', 'pet cat', 'domestic', 'domesticated cat', 'tabby', 'tabby cat', 'kitty', 'moggy', 'moggie', 'feral cat', 'maine coon', 'siamese', 'siamese cat', 'bengal cat', 'savannah cat', 'persian cat', 'sphynx', 'felis silvestris catus', 'common cat'],
+      tells: ['Every breed, from Siamese to Maine Coon, is this single species', 'Comes in colours no wild cat wears: white patches, tortoiseshell, colourpoint', 'Descends from the African wildcat, tamed in the Near East about 10,000 years ago'] },
+    { id: 'european-wildcat', name: 'European wildcat', sci: 'Felis silvestris', line: 'domestic', tier: 2, regions: ['europe'],
+      where: 'Forests from Scotland and Iberia to the Caucasus',
+      hb: [45, 80], tail: [30, 30], status: 'LC',
+      also: ['Scottish wildcat', 'Caucasian wildcat'],
+      accept: ['scottish wildcat', 'caucasian wildcat', 'european wild cat', 'forest wildcat', 'european forest cat', 'highland tiger', 'scottish wild cat'],
+      tells: ['Thick, blunt, club-shaped tail with separate black rings and a black tip', 'Stocky, long-furred tabby; a dark stripe runs down the spine and stops at the tail', 'Broader head and heavier build than a house cat'],
+      hint: 'Europe' },
+    { id: 'african-wildcat', name: 'African wildcat', sci: 'Felis lybica', line: 'domestic', tier: 2, regions: ['africa', 'asia'],
+      where: 'Africa, the Middle East and across to India and western China',
+      hb: [45, 80], tail: [30, 30], status: 'LC',
+      also: ['Afro-Asiatic wildcat', 'Asiatic wildcat'],
+      accept: ['afro asiatic wildcat', 'asiatic wildcat', 'asian wildcat', 'near eastern wildcat', 'indian desert cat', 'african wild cat', 'southern african wildcat', 'desert cat', 'felis silvestris lybica', 'asiatic steppe wildcat'],
+      tells: ['Looks like a lean, long-legged, pale tabby house cat', 'Reddish-orange backs to the ears', 'Thin, tapering tail with a few rings and a black tip; sits bolt upright'],
+      note: 'This is the house cat’s wild ancestor.',
+      hint: 'Africa or Asia' },
+    { id: 'chinese-mountain-cat', name: 'Chinese mountain cat', sci: 'Felis bieti', line: 'domestic', tier: 3, regions: ['asia'],
+      where: 'North-eastern edge of the Tibetan Plateau in China',
+      hb: [60, 85], tail: [29, 35], status: 'VU',
+      also: ['Chinese desert cat', 'Chinese steppe cat'],
+      accept: ['chinese desert cat', 'chinese steppe cat', 'chinese mountain', 'felis silvestris bieti', 'biets cat'],
+      tells: ['Stocky, sandy-coloured cat with almost no markings on the body', 'Short dark tufts on the ears, and pale, often bluish eyes', 'Bushy tail with dark rings and a black tip'] },
+    { id: 'sand-cat', name: 'Sand cat', sci: 'Felis margarita', line: 'domestic', tier: 2, regions: ['africa', 'asia'],
+      where: 'Deserts of North Africa, Arabia and Central Asia',
+      hb: [39, 52], tail: [22, 31], status: 'LC',
+      also: ['Sand dune cat'],
+      accept: ['sand dune cat', 'dune cat', 'desert sand cat', 'sandcat'],
+      tells: ['Broad, flat head with big ears set low and wide apart', 'Pale sandy coat; dark bars on the front legs and a black-tipped tail', 'Fur-covered soles for hot sand; smaller than a house cat'] },
+    { id: 'black-footed-cat', name: 'Black-footed cat', sci: 'Felis nigripes', line: 'domestic', tier: 2, regions: ['africa'],
+      where: 'Dry grassland of southern Africa: Namibia, Botswana, South Africa',
+      hb: [37, 52], tail: [14, 20], status: 'VU',
+      also: ['Small-spotted cat'],
+      accept: ['small spotted cat', 'blackfooted cat', 'black foot cat', 'blackfoot cat', 'black footed', 'anthill tiger'],
+      tells: ['Africa’s smallest cat: about half the weight of a house cat', 'Bold black spots that merge into thick bands on the legs and shoulders', 'Black soles under its feet; round head with large eyes'] },
+    { id: 'jungle-cat', name: 'Jungle cat', sci: 'Felis chaus', line: 'domestic', tier: 2, regions: ['africa', 'asia'],
+      where: 'Wetlands and reedbeds from Egypt through India to Southeast Asia',
+      hb: [58, 76], tail: [21, 27], status: 'LC',
+      also: ['Swamp cat', 'Reed cat'],
+      accept: ['swamp cat', 'reed cat', 'swamp lynx', 'jungle lynx', 'junglecat'],
+      tells: ['Plain sandy-grey coat and long legs; bigger than a house cat', 'Short tail with a few dark rings and a black tip', 'Small dark tufts on tall ears set close together'] }
+  ];
+
+  /* How to tell two cats apart. Each entry is shown on both cats. */
+  const PAIRS = [
+    ['leopard', 'jaguar', 'Jaguar rosettes have spots inside; leopard rosettes are empty. The jaguar is stockier, with a bigger head and a shorter tail, and lives only in the Americas.'],
+    ['leopard', 'cheetah', 'Cheetah spots are solid dots, and black tear lines run down its face. The leopard has rosettes, no tear lines and a much heavier build.'],
+    ['leopard', 'snow-leopard', 'The snow leopard is smoky grey with a tail as thick as a scarf. The leopard is golden, with tighter, crisper rosettes.'],
+    ['jaguar', 'ocelot', 'Same forests, very different scale: a jaguar can weigh ten times as much. Ocelot markings stretch into long chains; jaguar rosettes stay round.'],
+    ['clouded-leopard', 'sunda-clouded-leopard', 'Mainland clouds are large with few spots inside. Sunda clouds are smaller, darker and packed with spots. In practice, ask where the photo was taken.'],
+    ['clouded-leopard', 'marbled-cat', 'The marbled cat is house-cat size with a round head and a bushy tail. The clouded leopard is about five times heavier, with a long muzzle.'],
+    ['sunda-clouded-leopard', 'marbled-cat', 'Both live on Borneo and Sumatra. The marbled cat is house-cat size with a round head; the clouded leopard is far bigger with a long muzzle.'],
+    ['asian-golden-cat', 'bay-cat', 'The bay cat is about a third of the weight and lives only on Borneo, where the Asian golden cat is absent. The golden cat has bolder white face stripes.'],
+    ['asian-golden-cat', 'african-golden-cat', 'Different continents, and not close relatives. The Asian cat has crisp white stripes on the cheeks and forehead; the African cat’s face is plainer.'],
+    ['bay-cat', 'flat-headed-cat', 'Both are small reddish cats of Borneo. The flat-headed cat has a short tail and a long flat skull; the bay cat has a long tail and a round head.'],
+    ['puma', 'jaguarundi', 'A jaguarundi is house-cat size and low-slung, with a tiny flat head. A puma is ten times heavier, with a pale muzzle and a black-tipped tail.'],
+    ['puma', 'lion', 'A lioness has a tufted tail and a big square muzzle. A puma has a small round head and a thick tail with no tuft. Lions: Africa and India. Pumas: the Americas.'],
+    ['caracal', 'eurasian-lynx', 'The caracal has the ear tufts but a plain coat, a longer tail and no cheek ruff. True lynxes have bobbed tails and ruffs.'],
+    ['caracal', 'african-golden-cat', 'The caracal has long black ear tufts and lives in dry open country. The golden cat has small round ears and keeps to rainforest.'],
+    ['caracal', 'serval', 'Close relatives. The serval is spotted with huge rounded ears; the caracal is plain with pointed, tasselled ears.'],
+    ['caracal', 'jungle-cat', 'The caracal is redder and bigger, with long tufts and black ear backs. The jungle cat is greyer, with a ringed tail tip.'],
+    ['serval', 'cheetah', 'A serval is about a third of the size, with enormous ears and a short tail. A cheetah has tear lines and a long tail.'],
+    ['ocelot', 'margay', 'The margay is under half the weight, with bigger eyes and a much longer tail. The ocelot is stocky, with a shorter tail and long chain-like markings.'],
+    ['margay', 'northern-tiger-cat', 'The tiger cat is slimmer, with a thinner, shorter tail, smaller eyes and a narrower muzzle. Margay rosettes are larger and its paws look oversized.'],
+    ['margay', 'southern-tiger-cat', 'The tiger cat is slimmer, with a thinner, shorter tail, smaller eyes and a narrower muzzle. Margay rosettes are larger and its paws look oversized.'],
+    ['ocelot', 'northern-tiger-cat', 'The ocelot is four or five times heavier and stocky. The tiger cat is dainty, lighter than a house cat, with small simple rosettes.'],
+    ['northern-tiger-cat', 'southern-tiger-cat', 'Not reliably separable by eye. Southern: Atlantic Forest of southern Brazil, Paraguay and north-east Argentina. Northern: Central America, the Andes and northern Brazil.'],
+    ['geoffroys-cat', 'kodkod', 'The kodkod is smaller, with a shorter, bushier tail and a rounder head, and keeps to Chilean forest. Geoffroy’s cat is bigger and longer-tailed, in open country east of the Andes.'],
+    ['geoffroys-cat', 'pampas-cat', 'Geoffroy’s cat is covered in small solid spots. The pampas cat is shaggier, with banded legs and a streaky or plain body.'],
+    ['geoffroys-cat', 'southern-tiger-cat', 'Geoffroy’s cat has solid dots; tiger cats have open rosettes.'],
+    ['pampas-cat', 'andean-cat', 'The Andean cat has a far longer, thicker tail and a black nose. The pampas cat has a shorter tail, a pink nose and bolder leg bands.'],
+    ['eurasian-lynx', 'iberian-lynx', 'The Iberian lynx is about half the weight, always heavily spotted, with a long beard. The Eurasian is bigger and often plainer. Iberian lynx live only in Spain and Portugal.'],
+    ['canada-lynx', 'bobcat', 'Lynx: huge paws, long ear tufts, long hind legs, tail tip black all the way round. Bobcat: smaller feet, short tufts, more spots, tail tip white underneath.'],
+    ['eurasian-lynx', 'canada-lynx', 'The Eurasian lynx is about twice the weight and often spotted. The Canada lynx is greyer, with bigger feet for its size. Different continents.'],
+    ['iberian-lynx', 'bobcat', 'Both are spotted. The Iberian lynx has a long beard and a fully black tail tip; the bobcat has a short ruff and a tail tip that is white underneath. Different continents.'],
+    ['leopard-cat', 'sunda-leopard-cat', 'Not reliably separable by eye. Mainland Asia against the Sunda islands and the Philippines.'],
+    ['leopard-cat', 'fishing-cat', 'The fishing cat is twice the size, stocky and short-tailed, with an olive-grey coat. The leopard cat is slim, leggy and long-tailed.'],
+    ['fishing-cat', 'flat-headed-cat', 'The flat-headed cat is a third of the size, with a reddish head and almost no body spots. The fishing cat is big, grey and clearly spotted.'],
+    ['leopard-cat', 'rusty-spotted-cat', 'The rusty-spotted cat is half the size and grey, with faint rusty spots. The leopard cat is tawny with bold black spots.'],
+    ['leopard-cat', 'domestic-cat', 'Bengal house cats carry leopard cat ancestry. A wild leopard cat is leggier, with a small head, rounded white-spotted ears and white streaks beside the nose.'],
+    ['leopard-cat', 'marbled-cat', 'The marbled cat has big cloud-like blotches and a tail as long as its body. The leopard cat has separate round spots and a shorter tail.'],
+    ['pallass-cat', 'sand-cat', 'Both have wide faces and low ears. Pallas’s cat is shaggy, grey and stocky with round pupils; the sand cat is sleek, pale and big-eared.'],
+    ['pallass-cat', 'chinese-mountain-cat', 'Both live on the Tibetan Plateau. Pallas’s cat has a flat face and low ears; the mountain cat has an ordinary cat face with upright, tufted ears.'],
+    ['sand-cat', 'african-wildcat', 'The sand cat has a broader head, ears set low on the sides and almost no body markings. The wildcat is taller, with upright ears and tabby stripes.'],
+    ['african-wildcat', 'european-wildcat', 'European: stocky, with a thick blunt tail and crisp rings. African: leaner and longer-legged, with a thin tapering tail and reddish ears.'],
+    ['european-wildcat', 'domestic-cat', 'A tabby house cat has a thinner, pointed tail with rings that join up, and its spine stripe carries on down the tail.'],
+    ['african-wildcat', 'domestic-cat', 'Close cousins, often impossible from a photo. Wildcats are long-legged, sit bolt upright and have reddish backs to the ears.'],
+    ['black-footed-cat', 'african-wildcat', 'The black-footed cat is half the size, with bold spots and black soles. The wildcat has faint tabby stripes.'],
+    ['black-footed-cat', 'rusty-spotted-cat', 'The two smallest cats. Rusty-spotted: India and Sri Lanka, grey with rusty spots. Black-footed: southern Africa, tawny with bold black spots.'],
+    ['jungle-cat', 'african-wildcat', 'The jungle cat is bigger and plainer, with a shorter tail and small ear tufts.'],
+    ['chinese-mountain-cat', 'jungle-cat', 'Both are plain, sandy cats with small ear tufts. The mountain cat is stockier and thicker-furred, with a bushier tail, and lives only on the Tibetan Plateau.'],
+    ['jaguarundi', 'domestic-cat', 'A black house cat has a round face and upright pointed ears. The jaguarundi has a long weasel-like body, a flat head and small round ears.']
+  ];
+
+  /* Names that cover more than one species. Typing one prompts "which one?" instead of marking a miss.
+     exact: species for which the generic name is also its proper name. */
+  const GENERIC = [
+    { keys: ['lynx', 'lynxes'], ids: ['eurasian-lynx', 'iberian-lynx', 'canada-lynx', 'bobcat'], ask: 'Which lynx? There are four: Eurasian, Iberian, Canada and the bobcat.' },
+    { keys: ['wildcat', 'wild cat', 'wildcats'], ids: ['european-wildcat', 'african-wildcat'], ask: 'Which wildcat: European or African?' },
+    { keys: ['golden cat'], ids: ['asian-golden-cat', 'african-golden-cat'], ask: 'Which golden cat: Asian or African?' },
+    { keys: ['clouded leopard'], ids: ['clouded-leopard', 'sunda-clouded-leopard'], exact: 'clouded-leopard', ask: 'Which clouded leopard? This is not the mainland one.' },
+    { keys: ['leopard cat'], ids: ['leopard-cat', 'sunda-leopard-cat'], exact: 'leopard-cat', ask: 'Which leopard cat? This is not the mainland one.' },
+    { keys: ['tiger cat', 'tigercat'], ids: ['northern-tiger-cat', 'southern-tiger-cat'], ask: 'Which tiger cat: northern or southern?' },
+    { keys: ['oncilla', 'tigrina', 'little spotted cat'], ids: ['northern-tiger-cat', 'southern-tiger-cat'], exact: 'northern-tiger-cat', ask: 'Oncilla used to cover both tiger cats. Is this the northern or the southern one?' },
+    { keys: ['panther'], ids: ['leopard', 'jaguar', 'puma'], ask: 'Panther is a nickname for three different cats. Say leopard, jaguar or puma.' },
+    { keys: ['black panther'], ids: ['leopard', 'jaguar'], ask: 'A black panther is a dark leopard or a dark jaguar. Which is this?' },
+    { keys: ['mountain cat'], ids: ['andean-cat', 'chinese-mountain-cat'], ask: 'Which mountain cat: Andean or Chinese?' },
+    { keys: ['golden'], ids: ['asian-golden-cat', 'african-golden-cat'], ask: 'Which golden cat: Asian or African?' }
+  ];
+
+  const DRILLS = [
+    { id: 'spotted-big', name: 'Leopard, jaguar or cheetah?', ids: ['leopard', 'jaguar', 'cheetah', 'snow-leopard', 'clouded-leopard', 'sunda-clouded-leopard'] },
+    { id: 'ocelot-trio', name: 'Ocelot, margay or tiger cat?', ids: ['ocelot', 'margay', 'northern-tiger-cat', 'southern-tiger-cat'] },
+    { id: 'tufted', name: 'Four lynxes and a caracal', ids: ['eurasian-lynx', 'iberian-lynx', 'canada-lynx', 'bobcat', 'caracal'] },
+    { id: 'plain', name: 'Plain coats, no pattern', ids: ['puma', 'lion', 'jaguarundi', 'caracal', 'asian-golden-cat', 'african-golden-cat', 'bay-cat', 'jungle-cat', 'chinese-mountain-cat'] },
+    { id: 'far-south', name: 'Small cats of the far south', ids: ['geoffroys-cat', 'kodkod', 'pampas-cat', 'andean-cat'] },
+    { id: 'house-cat', name: 'Wild, or just a house cat?', ids: ['domestic-cat', 'european-wildcat', 'african-wildcat', 'sand-cat', 'black-footed-cat', 'jungle-cat', 'leopard-cat', 'jaguarundi'] },
+    { id: 'small-asian', name: 'Small spotted cats of Asia', ids: ['leopard-cat', 'sunda-leopard-cat', 'fishing-cat', 'flat-headed-cat', 'rusty-spotted-cat', 'marbled-cat', 'pallass-cat'] }
+  ];
+
+  const STATUS = { LC: 'Least concern', NT: 'Near threatened', VU: 'Vulnerable', EN: 'Endangered', CR: 'Critically endangered', NE: 'Not evaluated' };
+  const REGIONS = { africa: 'Africa', asia: 'Asia', europe: 'Europe', americas: 'The Americas' };
+
+  root.CATDATA = { LINES, CATS, PAIRS, GENERIC, DRILLS, STATUS, REGIONS };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* Every Cat in the World: quiz logic with no DOM in it, so it can be tested in Node. */
+(function (root) {
+  const D = root.CATDATA;
+  const byId = Object.fromEntries(D.CATS.map((c) => [c.id, c]));
+  const lineById = Object.fromEntries(D.LINES.map((l) => [l.id, l]));
+  const ALL_IDS = D.CATS.map((c) => c.id);
+
+  // ---------- look-alike graph ----------
+  const pairText = {};
+  const lookalikes = Object.fromEntries(ALL_IDS.map((id) => [id, []]));
+  for (const [a, b, text] of D.PAIRS) {
+    pairText[a + '|' + b] = text; pairText[b + '|' + a] = text;
+    lookalikes[a].push(b); lookalikes[b].push(a);
+  }
+  const tellApart = (a, b) => pairText[a + '|' + b] || null;
+
+  // ---------- text matching ----------
+  function norm(s) {
+    return String(s == null ? '' : s).toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[‘’'`´]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+  }
+  const FILLER = new Set(['a', 'an', 'the', 'cub', 'cubs', 'kitten', 'kittens', 'baby', 'male', 'female', 'adult', 'juvenile', 'young']);
+  const stripFiller = (s) => { const out = s.split(' ').filter((w) => !FILLER.has(w)).join(' '); return out || s; };
+
+  const generic = new Map();
+  for (const g of D.GENERIC) for (const k of g.keys) generic.set(norm(k), g);
+
+  const alias = new Map(); // normalised name -> cat id
+  const addAlias = (text, id, soft) => {
+    const k = norm(text);
+    if (!k) return;
+    if (generic.has(k)) return;              // generic names are handled separately
+    if (alias.has(k)) { if (!soft && alias.get(k) !== id) throw new Error('alias "' + k + '" claimed by ' + alias.get(k) + ' and ' + id); return; }
+    alias.set(k, id);
+  };
+  for (const c of D.CATS) {
+    addAlias(c.name, c.id); addAlias(c.sci, c.id);
+    for (const a of c.also || []) addAlias(a.replace(/\(.*?\)/g, ' '), c.id, true);
+    for (const a of c.accept || []) addAlias(a, c.id);
+  }
+  // soft extras: "pallas" for "pallass cat", "fishing" for "fishing cat", when nothing else owns the word
+  for (const c of D.CATS) {
+    const n = norm(c.name);
+    if (n.endsWith(' cat') && n.length - 4 >= 5) addAlias(n.slice(0, -4), c.id, true);
+  }
+  const KEYS = [...alias.keys(), ...generic.keys()];
+
+  function editDistance(a, b, cap) {
+    // Damerau-Levenshtein (adjacent swaps count as one edit), abandoned early past cap.
+    const la = a.length, lb = b.length;
+    if (Math.abs(la - lb) > cap) return cap + 1;
+    let prev2 = null, prev = Array.from({ length: lb + 1 }, (_, j) => j);
+    for (let i = 1; i <= la; i++) {
+      const cur = [i]; let rowMin = i;
+      for (let j = 1; j <= lb; j++) {
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        let v = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+        if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) v = Math.min(v, prev2[j - 2] + 1);
+        cur[j] = v; if (v < rowMin) rowMin = v;
+      }
+      if (rowMin > cap) return cap + 1;
+      prev2 = prev; prev = cur;
+    }
+    return prev[lb];
+  }
+  const tolerance = (len) => (len <= 4 ? 0 : len <= 6 ? 1 : len <= 10 ? 2 : 3);
+
+  function resolveKey(key, targetId) {
+    if (generic.has(key)) {
+      const g = generic.get(key);
+      if (g.exact === targetId) return { verdict: 'right', said: targetId };
+      if (g.ids.includes(targetId)) return { verdict: 'almost', ask: g.ask };
+      return { verdict: 'wrong', said: g.exact || null };
+    }
+    if (alias.has(key)) {
+      const id = alias.get(key);
+      return id === targetId ? { verdict: 'right', said: id } : { verdict: 'wrong', said: id };
+    }
+    return null;
+  }
+
+  /* verdict: right | wrong | almost (right group, needs the exact cat) | unknown (not a name we know) | empty */
+  function matchAnswer(input, targetId) {
+    const raw = norm(input);
+    if (!raw) return { verdict: 'empty' };
+    const tries = new Set([raw, stripFiller(raw)]);
+    for (const t of [...tries]) {
+      if (t.endsWith('es')) tries.add(t.slice(0, -2));
+      if (t.endsWith('s')) tries.add(t.slice(0, -1));
+    }
+    for (const t of tries) { const r = resolveKey(t, targetId); if (r) return r; }
+    // forgiving spelling: nearest known name within a length-based tolerance
+    let best = null;
+    for (const t of [raw, stripFiller(raw)]) {
+      for (const k of KEYS) {
+        const tol = tolerance(k.length);
+        if (!tol) continue;
+        const d = editDistance(t, k, tol);
+        if (d > tol) continue;
+        const mine = alias.get(k) === targetId || (generic.has(k) && generic.get(k).exact === targetId);
+        if (!best || d < best.d || (d === best.d && mine && !best.mine)) best = { d, k, mine };
+      }
+    }
+    if (best) { const r = resolveKey(best.k, targetId); r.typo = true; r.read = best.k; return r; }
+    return { verdict: 'unknown' };
+  }
+
+  // ---------- randomness ----------
+  function mulberry32(seed) {
+    let a = seed >>> 0;
+    return function () { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  function shuffle(arr, rng) { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+  function weightedPick(items, weights, rng) {
+    let total = 0; for (const w of weights) total += w;
+    let r = rng() * total;
+    for (let i = 0; i < items.length; i++) { r -= weights[i]; if (r <= 0) return items[i]; }
+    return items[items.length - 1];
+  }
+
+  // ---------- multiple choice ----------
+  function pickOptions(targetId, deckIds, rng, opts) {
+    const hard = !opts || opts.hard !== false;
+    const count = (opts && opts.count) || 4;
+    const t = byId[targetId];
+    const inDeck = new Set(deckIds);
+    const pool = ALL_IDS.filter((id) => id !== targetId);
+    const weightOf = (id) => {
+      const c = byId[id];
+      if (!hard) return inDeck.has(id) ? 4 : 1;
+      let w = 1;
+      if (lookalikes[targetId].includes(id)) w += 18;
+      if (c.line === t.line) w += 3;
+      if (c.regions.some((r) => t.regions.includes(r))) w += 1;
+      if (inDeck.has(id)) w *= 1.6;
+      return w;
+    };
+    const chosen = [];
+    let cand = pool.slice();
+    while (chosen.length < count - 1 && cand.length) {
+      const pick = weightedPick(cand, cand.map(weightOf), rng);
+      chosen.push(pick); cand = cand.filter((id) => id !== pick);
+    }
+    return shuffle([targetId, ...chosen], rng);
+  }
+
+  // ---------- progress ----------
+  const MAX_BOX = 4, CLUE_CAP = 2;
+  const blankRecord = () => ({ box: 0, seen: 0, right: 0, last: 0, conf: {}, shown: [] });
+  function applyResult(rec, r) {
+    // r: { right, mode: 'mc' | 'type', kind: 'photo' | 'clue', said, at }
+    rec.seen += 1; rec.last = r.at || Date.now();
+    if (r.right) {
+      rec.right += 1;
+      if (r.kind === 'clue') rec.box = Math.max(rec.box, Math.min(CLUE_CAP, rec.box + 1));
+      else rec.box = Math.min(MAX_BOX, rec.box + (r.mode === 'type' ? 2 : 1));
+    } else {
+      rec.box = Math.max(0, rec.box - 2);
+      if (r.said && r.said !== r.target) rec.conf[r.said] = (rec.conf[r.said] || 0) + 1;
+    }
+    return rec;
+  }
+  const stage = (rec) => (!rec || !rec.seen ? 'new' : rec.box >= MAX_BOX ? 'cold' : 'learning');
+  function nextCat(deckIds, cats, recent, rng) {
+    const avoid = new Set(recent.slice(-Math.min(3, Math.max(0, deckIds.length - 1))));
+    const pool = deckIds.filter((id) => !avoid.has(id));
+    const W = [40, 25, 14, 6, 1.5];
+    const weights = pool.map((id) => { const r = cats[id]; return !r || !r.seen ? 25 : W[r.box]; });
+    return weightedPick(pool, weights, rng);
+  }
+  function pickPhoto(list, rec, rng, allowCurve) {
+    // list: photos for one cat. Avoids the ones shown most recently. Returns an index into list, or -1.
+    const idx = list.map((p, i) => i).filter((i) => !list[i].bad && (allowCurve || !list[i].cb));
+    if (!idx.length) return -1;
+    const recent = new Set((rec && rec.shown ? rec.shown : []).slice(-Math.floor(idx.length / 2)));
+    const fresh = idx.filter((i) => !recent.has(i));
+    const from = fresh.length ? fresh : idx;
+    return from[Math.floor(rng() * from.length)];
+  }
+
+  // ---------- decks ----------
+  function decks() {
+    const list = [];
+    list.push({ id: 'all', group: 'Core', name: 'All 41 cats', short: 'All 41 cats', ids: ALL_IDS.slice() });
+    list.push({ id: 'tier1', group: 'Core', name: 'Starter: the famous 12', short: 'Starter 12', ids: D.CATS.filter((c) => c.tier === 1).map((c) => c.id) });
+    list.push({ id: 'tier2', group: 'Core', name: 'Next: 16 for enthusiasts', short: 'Next 16', ids: D.CATS.filter((c) => c.tier === 2).map((c) => c.id) });
+    list.push({ id: 'tier3', group: 'Core', name: 'Deep cuts: the obscure 13', short: 'Deep cuts 13', ids: D.CATS.filter((c) => c.tier === 3).map((c) => c.id) });
+    for (const d of D.DRILLS) list.push({ id: 'drill-' + d.id, group: 'Look-alike drills', name: d.name, ids: d.ids.slice() });
+    for (const l of D.LINES) list.push({ id: 'line-' + l.id, group: 'By line', name: l.name, ids: D.CATS.filter((c) => c.line === l.id).map((c) => c.id) });
+    for (const [rid, rname] of Object.entries(D.REGIONS)) list.push({ id: 'region-' + rid, group: 'By continent', name: rname, ids: D.CATS.filter((c) => c.regions.includes(rid)).map((c) => c.id) });
+    return list;
+  }
+  function weakDeck(cats, size) {
+    const scored = ALL_IDS.map((id) => { const r = cats[id]; return { id, s: !r || !r.seen ? 2.5 : r.box }; }).filter((x) => x.s < MAX_BOX);
+    scored.sort((a, b) => a.s - b.s);
+    return scored.slice(0, size || 12).map((x) => x.id);
+  }
+
+  const cmToIn = (cm) => Math.round(cm / 2.54);
+  function sizeText(c) {
+    const span = (r) => (r[0] === r[1] ? 'about ' + cmToIn(r[0]) + ' in (' + r[0] + ' cm)' : cmToIn(r[0]) + '–' + cmToIn(r[1]) + ' in (' + r[0] + '–' + r[1] + ' cm)');
+    return { body: span(c.hb), tail: span(c.tail) };
+  }
+
+  root.CATENGINE = { byId, lineById, ALL_IDS, lookalikes, tellApart, norm, matchAnswer, editDistance, mulberry32, shuffle, weightedPick,
+    pickOptions, applyResult, blankRecord, stage, nextCat, pickPhoto, decks, weakDeck, sizeText, MAX_BOX, _alias: alias, _generic: generic };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* Every Cat in the World: interface. */
+(function () {
+  'use strict';
+  const D = window.CATDATA, E = window.CATENGINE;
+  const $ = (s, r) => (r || document).querySelector(s);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const KEY = 'every-cat-in-the-world.v1';
+  const rng = Math.random;
+  const view = $('#view');
+
+  const svg = (body, extra) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"' + (extra || '') + '>' + body + '</svg>';
+  const ICON = {
+    check: svg('<path d="m5 12.5 4.5 4.5L19 7.5"/>', ' stroke-width="3"'),
+    cross: svg('<path d="M6 6l12 12M18 6 6 18"/>', ' stroke-width="3"'),
+    arrow: svg('<path d="M12 5v14M6 13l6 6 6-6"/>', ' stroke-width="3"'),
+    chevron: svg('<path d="m6 9 6 6 6-6"/>', ' stroke-width="2.5"'),
+    back: svg('<path d="M15 5l-7 7 7 7"/>', ' stroke-width="2.5"'),
+    pin: svg('<path d="M12 21s-6.5-5.6-6.5-10.4A6.5 6.5 0 0 1 12 4a6.5 6.5 0 0 1 6.5 6.6C18.5 15.4 12 21 12 21Z"/><circle cx="12" cy="10.5" r="2"/>')
+  };
+
+  // ---------- photos ----------
+  let MANIFEST = {};
+  try { MANIFEST = JSON.parse($('#photo-manifest').textContent) || {}; } catch (e) { MANIFEST = {}; }
+  const photosOf = (id) => (MANIFEST.cats && MANIFEST.cats[id]) || [];
+  const usable = (id) => photosOf(id).filter((p) => !p.bad);
+  const HAS_PHOTOS = D.CATS.some((c) => photosOf(c.id).length > 0);
+  const ALL_PHOTOS = D.CATS.every((c) => photosOf(c.id).some((p) => !p.cb));
+  const HAS_CURVE = D.CATS.some((c) => photosOf(c.id).some((p) => p.cb));
+  const thumbOf = (id) => (MANIFEST.thumbs && MANIFEST.thumbs[id]) || null;
+
+  // ---------- saved progress ----------
+  function freshState() {
+    return { v: 1, settings: { mode: 'mc', deck: 'tier1', round: 10, hard: true, curve: false }, cats: {}, exam: { type: null, mc: null, certified: null }, bestStreak: 0 };
+  }
+  function loadState() {
+    let s = null;
+    try { s = JSON.parse(localStorage.getItem(KEY)); } catch (e) { s = null; }
+    const base = freshState();
+    if (!s || typeof s !== 'object') return base;
+    const cats = {};
+    for (const id of E.ALL_IDS) if (s.cats && s.cats[id]) cats[id] = Object.assign(E.blankRecord(), s.cats[id]);
+    return { v: 1, settings: Object.assign(base.settings, s.settings || {}), cats, exam: Object.assign(base.exam, s.exam || {}), bestStreak: s.bestStreak || 0 };
+  }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* storage can be unavailable; progress then lasts for this visit */ } }
+  let S = loadState();
+  const sessions = { train: null, exam: null };
+
+  const stageOf = (id) => E.stage(S.cats[id]);
+  const coldCount = (ids) => (ids || E.ALL_IDS).filter((id) => stageOf(id) === 'cold').length;
+  const lineClass = (cat) => 'line-' + E.lineById[cat.line].color;
+  const labelOf = (cat) => cat.label || cat.name;
+  const STAGE_WORD = { new: 'Not seen yet', learning: 'Learning', cold: 'Known cold' };
+
+  // ---------- decks ----------
+  function allDecks() {
+    const list = E.decks();
+    const seen = E.ALL_IDS.filter((id) => S.cats[id] && S.cats[id].seen).length;
+    if (seen >= 6) { const ids = E.weakDeck(S.cats, 12); if (ids.length >= 4) list.unshift({ id: 'weak', group: 'Yours', name: 'Your weak spots', ids }); }
+    return list;
+  }
+  function getDeck(id) {
+    const list = allDecks();
+    return list.find((d) => d.id === id) || list.find((d) => d.id === 'tier1');
+  }
+
+  // ---------- sessions ----------
+  function startRound(kind, opts) {
+    opts = opts || {};
+    const exam = kind === 'exam';
+    let deck, ids, name;
+    if (exam) { ids = E.ALL_IDS.slice(); name = 'The exam'; }
+    else if (opts.ids) { ids = opts.ids.slice(); name = opts.name || 'Your misses'; }
+    else { deck = getDeck(opts.deckId || S.settings.deck); ids = deck.ids.slice(); name = deck.name; S.settings.deck = deck.id; }
+    const short = deck && deck.short ? deck.short : name;
+    const whole = exam || S.settings.round === 'deck' || opts.whole;
+    const Q = {
+      kind, name, short, ids, custom: !!opts.ids, mode: exam ? opts.mode : S.settings.mode,
+      length: whole ? ids.length : Math.max(1, Number(S.settings.round) || 10),
+      order: whole ? E.shuffle(ids, rng) : null,
+      i: 0, recent: [], results: [], streak: 0, cur: null, done: false, startedAt: Date.now(), endedAt: 0, photoCount: 0
+    };
+    sessions[kind] = Q;
+    save();
+    nextQuestion(Q);
+    return Q;
+  }
+  function nextQuestion(Q) {
+    if (Q.i >= Q.length) { finish(Q); return; }
+    const id = Q.order ? Q.order[Q.i] : E.nextCat(Q.ids, S.cats, Q.recent, rng);
+    const pi = E.pickPhoto(photosOf(id), S.cats[id], rng, Q.kind !== 'exam' && S.settings.curve);
+    Q.cur = { id, pi, kind: pi >= 0 ? 'photo' : 'clue', options: E.pickOptions(id, Q.ids, rng, { hard: S.settings.hard }), answered: false, result: null, msg: null, typed: '', becameCold: false };
+    Q.recent.push(id);
+  }
+  function submit(Q, given) {
+    const q = Q.cur;
+    if (!q || q.answered) return;
+    let res;
+    if (given.skip) res = { verdict: 'skip' };
+    else if (given.id) res = { verdict: given.id === q.id ? 'right' : 'wrong', said: given.id };
+    else {
+      res = E.matchAnswer(given.text, q.id);
+      if (res.verdict === 'empty') return;
+      if (res.verdict === 'almost' || res.verdict === 'unknown') { q.msg = res; paintPanel(Q, true); return; }
+      res.text = given.text;
+    }
+    q.answered = true; q.result = res; q.msg = null;
+    const right = res.verdict === 'right';
+    const before = stageOf(q.id);
+    const rec = S.cats[q.id] || E.blankRecord();
+    E.applyResult(rec, { right, mode: Q.mode, kind: q.kind, said: res.said, target: q.id, at: Date.now() });
+    if (q.pi >= 0) { rec.shown = (rec.shown || []).concat(q.pi).slice(-6); Q.photoCount += 1; }
+    S.cats[q.id] = rec;
+    q.becameCold = before !== 'cold' && E.stage(rec) === 'cold';
+    Q.results.push({ id: q.id, right, said: res.said || null, text: res.text || '', skip: res.verdict === 'skip' });
+    Q.streak = right ? Q.streak + 1 : 0;
+    if (Q.streak > S.bestStreak) S.bestStreak = Q.streak;
+    save();
+    paintPips(Q); paintPanel(Q, true); paintChrome();
+  }
+  function advance(Q) {
+    if (!Q.cur || !Q.cur.answered) return;
+    Q.i += 1;
+    nextQuestion(Q);
+    if (Q.done) { render(); return; }
+    paintTop(Q); paintPips(Q); paintStage(Q); paintPanel(Q, true);
+    view.scrollTop = 0;
+  }
+  function finish(Q) {
+    Q.done = true; Q.cur = null; Q.endedAt = Date.now();
+    if (Q.kind === 'exam') {
+      const score = Q.results.filter((r) => r.right).length;
+      const entry = { score, of: Q.length, ms: Q.endedAt - Q.startedAt, at: Q.endedAt, photos: Q.photoCount };
+      const prev = S.exam[Q.mode];
+      if (!prev || score > prev.score || (score === prev.score && entry.ms < prev.ms)) S.exam[Q.mode] = entry;
+      if (score === Q.length && Q.mode === 'type' && Q.photoCount === Q.length && !S.exam.certified) S.exam.certified = Q.endedAt;
+    }
+    save();
+  }
+
+  // ---------- chrome ----------
+  function route() {
+    const h = (location.hash || '').replace(/^#/, '');
+    if (h.indexOf('cat-') === 0 && E.byId[h.slice(4)]) return { name: 'cat', id: h.slice(4), tab: 'cats' };
+    if (h === 'exam' || h === 'cats' || h === 'notes') return { name: h, tab: h };
+    return { name: 'train', tab: 'train' };
+  }
+  function paintChrome() {
+    const r = route();
+    document.querySelectorAll('.tab').forEach((a) => { if (a.dataset.tab === r.tab) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+    const cold = coldCount();
+    $('#known-count').textContent = cold + '/41';
+    $('#known').setAttribute('aria-label', cold + ' of 41 cats known cold. Open the full list.');
+    $('#meter').innerHTML = D.LINES.map((l) => {
+      const ids = D.CATS.filter((c) => c.line === l.id).map((c) => c.id);
+      return '<i class="line-' + l.color + '" style="--f:' + (coldCount(ids) / ids.length).toFixed(3) + '"></i>';
+    }).join('');
+  }
+
+  // ---------- quiz painting ----------
+  function mountQuiz() {
+    view.innerHTML = '<section class="quiz" id="quiz"><div id="q-top"></div><div id="q-pips"></div>' +
+      '<figure class="stage" id="q-stage"></figure>' +
+      '<div class="panel" id="q-panel"><div id="p-head"></div><div id="p-answer"></div><div id="p-foot"></div><div id="p-reveal" aria-live="polite"></div></div></section>';
+  }
+  function paintTop(Q) {
+    const el = $('#q-top'); if (!el) return;
+    if (Q.kind === 'exam') {
+      el.className = 'exam-top';
+      el.innerHTML = '<span>The exam, ' + (Q.mode === 'type' ? 'typed' : 'multiple choice') + '</span><span class="count">Cat ' + Math.min(Q.i + 1, Q.length) + ' of ' + Q.length + '</span>' +
+        '<button class="link" type="button" data-action="quit-exam">Stop the exam</button>';
+    } else {
+      el.className = 'quiz-top';
+      el.innerHTML = '<button class="deck-btn" type="button" data-action="open-decks" aria-haspopup="dialog"><span>' + esc(Q.short || Q.name) + '</span>' + ICON.chevron + '</button>' +
+        '<div class="seg" role="radiogroup" aria-label="How you answer">' +
+        '<button type="button" role="radio" data-action="set-mode" data-mode="mc" aria-checked="' + (Q.mode === 'mc') + '">Multiple choice</button>' +
+        '<button type="button" role="radio" data-action="set-mode" data-mode="type" aria-checked="' + (Q.mode === 'type') + '">Type it</button></div>';
+    }
+  }
+  function paintPips(Q) {
+    const el = $('#q-pips'); if (!el) return;
+    const done = Q.results.length;
+    if (Q.length <= 20) {
+      el.className = 'pips';
+      let h = '';
+      for (let i = 0; i < Q.length; i++) h += '<i class="' + (i < done ? (Q.results[i].right ? 'right' : 'wrong') : i === done ? 'now' : '') + '"></i>';
+      el.innerHTML = h;
+    } else {
+      el.className = 'pips long';
+      el.innerHTML = '<i style="--p:' + (done / Q.length).toFixed(4) + '"></i>';
+    }
+    el.setAttribute('role', 'img');
+    el.setAttribute('aria-label', 'Question ' + Math.min(done + 1, Q.length) + ' of ' + Q.length + '. ' + Q.results.filter((r) => r.right).length + ' right so far.');
+  }
+  function paintStage(Q) {
+    const el = $('#q-stage'); if (!el || !Q.cur) return;
+    const q = Q.cur, cat = E.byId[q.id];
+    if (q.kind === 'photo') {
+      const p = photosOf(q.id)[q.pi];
+      const where = cat.hint ? (p.loc || cat.hint) : '';
+      el.className = 'stage';
+      el.innerHTML = '<img class="wash" src="' + esc(p.f) + '" alt="" aria-hidden="true">' +
+        '<img class="shot" src="' + esc(p.f) + '" alt="Photo of a cat to identify" data-photo="' + esc(p.f) + '" data-cat="' + q.id + '">' +
+        '<button class="zoom" type="button" data-action="zoom" aria-label="Enlarge the photo"></button>' +
+        (where ? '<span class="pin">' + ICON.pin + '<span>' + (p.loc ? 'Photographed in: ' : 'Range: ') + esc(where) + '</span></span>' : '');
+    } else {
+      el.className = 'stage clues';
+      el.innerHTML = '<p class="kicker">' + (HAS_PHOTOS ? 'No photo of this cat yet. Its field marks:' : 'Photos are not loaded yet, so here are this cat\u2019s field marks:') + '</p>' +
+        '<ul class="tells">' + cat.tells.map((t) => '<li>' + esc(t) + '</li>').join('') + '</ul>' +
+        '<p class="range">Lives: ' + esc(cat.where) + '</p>';
+    }
+  }
+  function formHTML(Q) {
+    return '<form class="typed" id="typed-form" autocomplete="off" novalidate><label class="sr" for="answer">Name this cat</label>' +
+      '<input id="answer" name="answer" type="text" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" enterkeyhint="go" placeholder="Type the cat’s name">' +
+      '<button class="btn" type="submit" id="typed-go">Check</button></form>';
+  }
+  function creditHTML(p) {
+    if (!p) return '';
+    const who = [p.by, p.lic].filter(Boolean).join(', ');
+    const link = p.src ? ' <a href="' + esc(p.src) + '" target="_blank" rel="noopener">Source</a>' : '';
+    return '<p class="credit">' + (p.note ? '<b>' + esc(p.note) + '</b> ' : '') + 'Photo: ' + esc(who || 'credit pending') + '.' + link + '</p>';
+  }
+  function revealHTML(Q) {
+    const q = Q.cur, cat = E.byId[q.id], res = q.result, right = res.verdict === 'right';
+    const line = E.lineById[cat.line];
+    const cls = right ? 'is-right' : res.verdict === 'skip' ? 'is-skip' : 'is-wrong';
+    const word = right ? 'Correct' : res.verdict === 'skip' ? 'Here it is' : 'Not this time';
+    const mark = right ? ICON.check : res.verdict === 'skip' ? ICON.arrow : ICON.cross;
+    let mix = '';
+    if (!right && res.said && E.byId[res.said]) {
+      const other = E.byId[res.said], tip = E.tellApart(q.id, res.said);
+      const th = thumbOf(other.id);
+      mix = '<div class="mixup' + (th ? ' with-thumb' : '') + '"><span><b>You said ' + esc(other.name) + '.</b> ' + esc(tip || ('For comparison, the ' + lower(other.name) + ': ' + lowerFirst(other.tells[0]) + '.')) + '</span>' +
+        (th ? '<a href="#cat-' + other.id + '"><img src="' + esc(th) + '" alt="' + esc(other.name) + '"></a>' : '') + '</div>';
+    } else if (!right && res.verdict === 'wrong' && res.text) {
+      mix = '<div class="mixup"><b>You said “' + esc(res.text) + '”.</b></div>';
+    }
+    const also = cat.also && cat.also.length ? '<span>Also: ' + esc(cat.also.join(', ')) + '</span>' : '';
+    const filled = q.becameCold ? '<p class="filled ' + lineClass(cat) + '"><span class="dot"></span>Station filled. ' + coldCount() + ' of 41 known cold.</p>' : '';
+    const next = Q.i + 1 >= Q.length ? (Q.kind === 'exam' ? 'See the result' : 'Finish the round') : 'Next cat';
+    return '<div class="reveal ' + cls + ' ' + lineClass(cat) + '">' +
+      '<p class="verdict"><span class="mark">' + mark + '</span><span>' + word + '</span>' + (right && res.typo ? '<small>spelling forgiven</small>' : '') + '</p>' +
+      '<div class="cat-head"><h3 class="cat-name">' + esc(cat.name) + '</h3>' +
+      '<p class="cat-sub"><span class="sci">' + esc(cat.sci) + '</span><span class="chip"><i class="dot"></i>' + esc(line.name) + '</span>' + also + '</p></div>' +
+      mix + filled +
+      '<ul class="tells">' + cat.tells.map((t) => '<li>' + esc(t) + '</li>').join('') + '</ul>' +
+      (q.kind === 'photo' ? creditHTML(photosOf(q.id)[q.pi]) : '') +
+      '<div class="reveal-actions"><a class="link" href="#cat-' + cat.id + '">More on this cat</a>' +
+      (Q.mode === 'mc' ? '<button class="btn" type="button" data-action="next" id="next-btn">' + next + '</button>' : '') + '</div></div>';
+  }
+  const lower = (name) => (/^(Asian|African|Andean|Eurasian|Iberian|Canada|Sunda|Geoffroy|Pallas|Chinese|European|Pampas)/.test(name) ? name : name.charAt(0).toLowerCase() + name.slice(1));
+  const lowerFirst = (s) => s.charAt(0).toLowerCase() + s.slice(1);
+
+  function paintPanel(Q, wantFocus) {
+    const head = $('#p-head'), ans = $('#p-answer'), foot = $('#p-foot'), rev = $('#p-reveal');
+    if (!head || !Q.cur) return;
+    const q = Q.cur, typed = Q.mode === 'type', quiz = $('#quiz');
+    quiz.dataset.mode = Q.mode; quiz.dataset.kind = q.kind; quiz.dataset.answered = q.answered ? '1' : '0';
+    head.innerHTML = q.answered ? '' : '<h2 class="ask" id="ask">Which cat is this?</h2>';
+    const streak = Q.streak >= 3 ? '<span class="streak">' + Q.streak + ' right in a row</span>' : '<span></span>';
+    if (typed) {
+      let form = $('#typed-form');
+      if (!form) { ans.innerHTML = formHTML(Q); form = $('#typed-form'); }
+      const input = $('#answer'), go = $('#typed-go');
+      const last = Q.i + 1 >= Q.length;
+      go.textContent = q.answered ? (last ? (Q.kind === 'exam' ? 'See the result' : 'Finish') : 'Next cat') : 'Check';
+      input.setAttribute('enterkeyhint', q.answered ? 'next' : 'go');
+      if (!q.answered && !q.msg) input.value = q.typed || '';
+      if (wantFocus && document.activeElement !== input) { try { input.focus({ preventScroll: true }); } catch (e) { input.focus(); } }
+      if (wantFocus && !q.answered) keepPhotoInView();
+    } else {
+      ans.innerHTML = q.answered ? '' : '<div class="options" role="group" aria-labelledby="ask">' + q.options.map((id, i) =>
+        '<button class="opt" type="button" data-action="pick" data-id="' + id + '"><span class="key" aria-hidden="true">' + (i + 1) + '</span><span>' + esc(labelOf(E.byId[id])) + '</span></button>').join('') + '</div>';
+    }
+    if (q.answered) foot.innerHTML = '';
+    else {
+      let msg = '';
+      if (typed) {
+        if (q.msg && q.msg.verdict === 'almost') msg = '<p class="typed-msg almost" role="status"><b>Close.</b> ' + esc(q.msg.ask) + '</p>';
+        else if (q.msg && q.msg.verdict === 'unknown') msg = '<p class="typed-msg" role="status"><b>I don’t know that name.</b> Check the spelling, or show the answer.</p>';
+        else msg = '<p class="typed-msg" role="status"></p>';
+      }
+      foot.innerHTML = msg + '<div class="under"><button class="link" type="button" data-action="skip">' + (typed ? 'Show the answer' : 'I don’t know') + '</button>' + streak + '</div>';
+    }
+    rev.innerHTML = q.answered ? revealHTML(Q) : '';
+    if (q.answered && !typed && wantFocus) { const b = $('#next-btn'); if (b) { try { b.focus({ preventScroll: true }); } catch (e) { b.focus(); } } }
+  }
+  // on a phone the keyboard covers the lower half, so slide the controls away and keep photo and input on screen
+  function keepPhotoInView() {
+    const st = $('#q-stage');
+    if (st && window.matchMedia && window.matchMedia('(pointer: coarse)').matches) view.scrollTop = Math.max(0, st.offsetTop - view.offsetTop - 6);
+  }
+  function paintQuiz(Q, wantFocus) { mountQuiz(); paintTop(Q); paintPips(Q); paintStage(Q); paintPanel(Q, wantFocus); }
+
+  // ---------- views ----------
+  function missesHTML(Q) {
+    const seen = new Set();
+    const rows = Q.results.filter((r) => !r.right && !seen.has(r.id) && seen.add(r.id)).map((r) => {
+      const cat = E.byId[r.id], other = r.said && E.byId[r.said];
+      const tip = other ? E.tellApart(r.id, r.said) : null;
+      return '<li class="' + lineClass(cat) + '"><div class="who"><a href="#cat-' + cat.id + '">' + esc(cat.name) + '</a>' +
+        '<span>' + (other ? 'you said ' + esc(other.name) : r.skip ? 'skipped' : r.text ? 'you said “' + esc(r.text) + '”' : '') + '</span></div>' +
+        '<p>' + esc(tip || cat.tells[0] + '.') + '</p></li>';
+    });
+    return rows.length ? '<ul class="misses">' + rows.join('') + '</ul>' : '';
+  }
+  const fmtTime = (ms) => { const s = Math.round(ms / 1000); return Math.floor(s / 60) + ' min ' + String(s % 60).padStart(2, '0') + ' s'; };
+  const fmtDate = (t) => { try { return new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); } catch (e) { return ''; } };
+
+  function renderTrain() {
+    let Q = sessions.train;
+    if (!Q) Q = startRound('train');
+    if (!Q.done) { paintQuiz(Q, false); return; }
+    const right = Q.results.filter((r) => r.right).length;
+    const missed = [...new Set(Q.results.filter((r) => !r.right).map((r) => r.id))];
+    let nudge = '';
+    const order = ['tier1', 'tier2', 'tier3', 'all'];
+    const at = order.indexOf(S.settings.deck);
+    if (!Q.custom && at >= 0 && at < 3) {
+      const deck = getDeck(S.settings.deck), cold = coldCount(deck.ids);
+      if (right === Q.length || cold >= deck.ids.length * 0.75) {
+        const nextDeck = getDeck(order[at + 1]);
+        nudge = '<div class="notice"><span><b>Ready for more.</b> ' + (HAS_PHOTOS ? cold + ' of ' + deck.ids.length + ' in this deck are known cold. ' : '') + 'Move on to “' + esc(nextDeck.name) + '”.</span></div>' +
+          '<div class="actions"><button class="btn" type="button" data-action="pick-deck" data-deck="' + nextDeck.id + '">Start ' + esc(nextDeck.name.split(':')[0].toLowerCase() === 'all 41 cats' ? 'all 41' : 'the next deck') + '</button></div>';
+      }
+    }
+    view.innerHTML = '<section class="page"><h1>Round done</h1>' +
+      '<p class="score"><b>' + right + '/' + Q.length + '</b><span>' + esc(Q.name) + ', ' + (Q.mode === 'type' ? 'typed' : 'multiple choice') + '</span></p>' +
+      (missed.length ? '<h2>What to look at again</h2>' + missesHTML(Q) : '<p class="lede">A clean round. ' + coldCount() + ' of 41 cats are known cold.</p>') +
+      nudge +
+      '<div class="actions"><button class="btn' + (nudge ? ' quiet' : '') + '" type="button" data-action="again">Go again</button>' +
+      (missed.length >= 2 ? '<button class="btn quiet" type="button" data-action="drill-misses">Drill these ' + missed.length + '</button>' : '') +
+      '<button class="btn quiet" type="button" data-action="open-decks">Choose another deck</button></div></section>';
+  }
+
+  function bestsHTML() {
+    const line = (label, b) => (b ? '<span>' + label + ': ' + b.score + ' of ' + b.of + ' in ' + fmtTime(b.ms) + ', ' + fmtDate(b.at) + (b.photos < b.of ? ' (written clues)' : '') + '</span>' : '');
+    const h = line('Best typed', S.exam.type) + line('Best multiple choice', S.exam.mc);
+    return h ? '<div class="bests">' + h + '</div>' : '';
+  }
+  function renderExam() {
+    const Q = sessions.exam;
+    if (Q && !Q.done) { paintQuiz(Q, false); return; }
+    if (Q && Q.done) {
+      const right = Q.results.filter((r) => r.right).length, perfect = right === Q.length;
+      const withPhotos = Q.photoCount === Q.length;
+      let top = '';
+      if (perfect && Q.mode === 'type' && withPhotos) {
+        const brag = 'I just named all 41 living cat species from photos, typed from memory. Pick any cat and try me.';
+        top = '<div class="cert"><h2>You can identify every cat in the world.</h2><p>All 41 species, named from photos and typed from memory, on ' + fmtDate(Q.endedAt) + '. The IUCN list is your referee.</p>' +
+          '<textarea id="brag" readonly rows="3" aria-label="A line to send your friends">' + esc(brag) + '</textarea><div class="actions"><button class="btn small" type="button" data-action="copy-brag">Copy that line</button><span class="streak" id="copied" role="status"></span></div></div>';
+      } else if (perfect) {
+        top = '<p class="lede">A perfect paper' + (Q.mode === 'mc' ? ' on multiple choice. Now do it typing the names.' : withPhotos ? '.' : ' on written clues. The claim needs photos.') + '</p>';
+      } else {
+        top = '<p class="lede">' + (Q.length - right) + ' to go before you can make the claim.</p>';
+      }
+      view.innerHTML = '<section class="page"><h1>Exam result</h1>' +
+        '<p class="score"><b>' + right + '/' + Q.length + '</b><span>' + (Q.mode === 'type' ? 'typed' : 'multiple choice') + ', ' + fmtTime(Q.endedAt - Q.startedAt) + '</span></p>' + top +
+        (perfect ? '' : '<h2>The ones that got away</h2>' + missesHTML(Q)) +
+        '<div class="actions"><button class="btn" type="button" data-action="start-exam" data-mode="' + Q.mode + '">Sit it again</button>' +
+        (perfect ? '' : '<button class="btn quiet" type="button" data-action="drill-misses" data-from="exam">Drill the misses</button>') +
+        '<button class="btn quiet" type="button" data-action="exam-home">Back to the exam page</button></div></section>';
+      return;
+    }
+    view.innerHTML = '<section class="page"><h1>The exam</h1>' +
+      '<p class="lede">All 41 cats, one ' + (ALL_PHOTOS ? 'photo' : 'question') + ' each, in random order, with no second tries. Pass it typing every name and the claim is yours.</p>' +
+      (ALL_PHOTOS ? '' : '<div class="notice"><span><b>Photos are not loaded in this build yet.</b> The exam runs on written field marks for now, which does not count towards the claim.</span></div>') +
+      (S.exam.certified ? '<div class="cert"><h2>You can identify every cat in the world.</h2><p>Passed typed, from photos, on ' + fmtDate(S.exam.certified) + '.</p></div>' : '') +
+      bestsHTML() +
+      '<div class="actions"><button class="btn" type="button" data-action="start-exam" data-mode="type">Start, typing the names</button>' +
+      '<button class="btn quiet" type="button" data-action="start-exam" data-mode="mc">Start, multiple choice</button></div>' +
+      '<p>For the four look-alike pairs that even specialists cannot split by coat, the exam shows where the photo was taken.</p></section>';
+  }
+
+  function renderCats() {
+    const counts = { new: 0, learning: 0, cold: 0 };
+    for (const id of E.ALL_IDS) counts[stageOf(id)] += 1;
+    let h = '<section class="lines"><div class="lines-head"><h1>All 41 cats, on eight lines</h1>' +
+      '<p class="lede">Every living cat sits on one of eight branches of the family tree. Each cat is a stop, and its stop fills in once you know it cold.</p>' +
+      '<p class="tally"><span><i class="dot" data-stage="cold"></i>' + counts.cold + ' known cold</span><span><i class="dot" data-stage="learning"></i>' + counts.learning + ' learning</span><span><i class="dot"></i>' + counts.new + ' not seen yet</span></p></div><div class="lines-body">';
+    for (const l of D.LINES) {
+      const cats = D.CATS.filter((c) => c.line === l.id);
+      h += '<section class="line line-' + l.color + '" aria-labelledby="h-' + l.id + '"><div class="line-head"><h2 id="h-' + l.id + '">' + esc(l.name) + '</h2>' +
+        '<button class="btn small quiet" type="button" data-action="pick-deck" data-deck="line-' + l.id + '">Drill these ' + cats.length + '</button><p>' + esc(l.blurb) + '</p></div><ol class="stops">';
+      for (const c of cats) {
+        const r = S.cats[c.id], st = stageOf(c.id), t = thumbOf(c.id);
+        h += '<li><a class="stop" href="#cat-' + c.id + '" data-stage="' + st + '"><span class="dot"></span>' +
+          '<span><span class="stop-name">' + esc(c.name) + '</span><span class="stop-sci">' + esc(c.sci) + '</span><span class="sr">. ' + STAGE_WORD[st] + '.</span></span>' +
+          '<span class="stop-side">' + (r && r.seen ? '<span>' + r.right + '/' + r.seen + '</span>' : '') + (t ? '<img src="' + esc(t) + '" alt="" loading="lazy">' : '') + '</span></a></li>';
+      }
+      h += '</ol></section>';
+    }
+    view.innerHTML = h + '</div></section>';
+  }
+
+  function renderCat(id) {
+    const c = E.byId[id], l = E.lineById[c.line], idx = E.ALL_IDS.indexOf(id);
+    const mates = D.CATS.filter((x) => x.line === c.line), pos = mates.indexOf(c) + 1;
+    const r = S.cats[id], st = stageOf(id), sz = E.sizeText(c), ph = usable(id);
+    const prev = D.CATS[(idx + 40) % 41], next = D.CATS[(idx + 1) % 41];
+    let gallery;
+    if (ph.length) {
+      gallery = '<div class="gallery" tabindex="0" aria-label="Photos of the ' + esc(c.name) + '">' + ph.map((p, i) => '<figure><img src="' + esc(p.f) + '" alt="' + esc(c.name) + ', photo ' + (i + 1) + '" loading="' + (i ? 'lazy' : 'eager') + '">' +
+        '<figcaption>' + (p.note ? '<span class="tag">' + esc(p.note) + '</span> ' : '') + esc([p.by, p.lic].filter(Boolean).join(', ')) + (p.src ? ' <a href="' + esc(p.src) + '" target="_blank" rel="noopener">Source</a>' : '') + '</figcaption></figure>').join('') + '</div>';
+    } else gallery = '<p class="nophoto">No photo of this cat is loaded yet.</p>';
+    const vs = E.lookalikes[id].map((o) => { const oc = E.byId[o], th = thumbOf(o); return '<div style="--vc:var(--l' + E.lineById[oc.line].color + ')"><a href="#cat-' + o + '">' + esc(oc.name) + '</a>' + (th ? '<img src="' + esc(th) + '" alt="" loading="lazy">' : '') + '<p>' + esc(E.tellApart(id, o)) + '</p></div>'; }).join('');
+    const conf = r ? Object.entries(r.conf || {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([o, n]) => E.byId[o] ? esc(E.byId[o].name) + (n > 1 ? ' (' + n + ' times)' : '') : '').filter(Boolean).join(', ') : '';
+    view.innerHTML = '<article class="cat ' + lineClass(c) + '">' +
+      '<a class="back" href="#cats">' + ICON.back + 'All 41 cats</a>' +
+      '<header class="cat-title"><p><span class="chip"><i class="dot"></i>' + esc(l.name) + ', stop ' + pos + ' of ' + mates.length + '</span></p>' +
+      '<h1>' + esc(c.name) + '</h1><p class="sci">' + esc(c.sci) + '</p>' + (c.also && c.also.length ? '<p class="also">Also called ' + esc(c.also.join(', ')) + '</p>' : '') + '</header>' +
+      gallery +
+      '<section><h2>How to recognise it</h2><ul class="tells">' + c.tells.map((t) => '<li>' + esc(t) + '</li>').join('') + '</ul>' + (c.note ? '<p>' + esc(c.note) + '</p>' : '') + '</section>' +
+      '<section><h2>Easily confused with</h2>' + (vs ? '<div class="versus">' + vs + '</div>' : '<p>Nothing. No other cat looks like this one.</p>') + '</section>' +
+      '<section><h2>Facts</h2><dl class="facts">' +
+      '<div><dt>Lives</dt><dd>' + esc(c.where) + '</dd></div>' +
+      '<div><dt>Body</dt><dd>' + sz.body + '</dd></div><div><dt>Tail</dt><dd>' + sz.tail + '</dd></div>' +
+      '<div><dt>Red List</dt><dd>' + D.STATUS[c.status] + '</dd></div>' +
+      '<div><dt>Your record</dt><dd>' + STAGE_WORD[st] + (r && r.seen ? '. Right ' + r.right + ' of ' + r.seen + ' times.' : '.') + (conf ? ' Mixed up with: ' + conf + '.' : '') + '</dd></div></dl></section>' +
+      '<nav class="pager" aria-label="Other cats"><a href="#cat-' + prev.id + '">← ' + esc(prev.name) + '</a><a href="#cat-' + next.id + '">' + esc(next.name) + ' →</a></nav></article>';
+  }
+
+  const NAMES = [
+    ['Mountain lion, cougar, catamount, Florida panther', 'Puma'],
+    ['Siberian, Amur, Bengal, Sumatran, Malayan or white tiger', 'Tiger'],
+    ['African lion, Asiatic lion, white lion', 'Lion'],
+    ['Black panther', 'Leopard in Africa and Asia, jaguar in the Americas'],
+    ['Amur, Persian or Indian leopard', 'Leopard'],
+    ['King cheetah, Asiatic cheetah', 'Cheetah'],
+    ['Scottish wildcat', 'European wildcat'],
+    ['Iriomote cat, Tsushima cat, Amur leopard cat', 'Leopard cat'],
+    ['Desert lynx, Persian lynx', 'Caracal, which is not a lynx'],
+    ['Oncilla, tigrina', 'Northern tiger cat'],
+    ['Manul', 'Pallas’s cat'],
+    ['Colocolo, Pantanal cat', 'Pampas cat'],
+    ['Bengal, Savannah, Maine Coon, Sphynx', 'Domestic cat (these are breeds)'],
+    ['Liger, tigon', 'A zoo cross of two species, so not a species'],
+    ['Sabre-toothed tiger', 'Extinct, and never a tiger']
+  ];
+  const SOURCES = [
+    ['IUCN Cat Specialist Group: classification of the cat family', 'https://www.catsg.org/classification'],
+    ['IUCN Cat Specialist Group: the 40 living wild species', 'https://catsg.org/cats/livingspecies'],
+    ['Wikipedia: List of felids (sizes and Red List status)', 'https://en.wikipedia.org/wiki/List_of_felids'],
+    ['Johnson and others, Science 2006: when the eight lineages split', 'https://doi.org/10.1126/science.1122277'],
+    ['National Geographic, 2026: the tilcayo, a newly named tiger cat', 'https://www.nationalgeographic.com/animals/article/meet-the-first-new-cat-species-discovered-in-100-years'],
+    ['Mongabay, 2024: the clouded tiger cat', 'https://news.mongabay.com/2024/04/a-tiger-cat-gains-new-species-designation-but-conservation-challenges-remain/']
+  ];
+  function settingsHTML() {
+    const seg = (name, opts, cur, three) => '<div class="seg' + (three ? ' three' : '') + '" role="radiogroup" aria-label="' + name + '">' + opts.map(([v, label]) =>
+      '<button type="button" role="radio" data-action="set" data-key="' + name + '" data-value="' + v + '" aria-checked="' + (String(cur) === String(v)) + '">' + label + '</button>').join('') + '</div>';
+    return '<div class="settings">' +
+      '<div class="row"><span id="s-round">Questions in a round</span>' + seg('round', [[10, '10'], [20, '20'], ['deck', 'Whole deck']], S.settings.round, true) + '</div>' +
+      '<div class="row"><span>Wrong choices offered</span>' + seg('hard', [[true, 'Look-alikes'], [false, 'Random']], S.settings.hard) + '</div>' +
+      (HAS_CURVE ? '<div class="row"><span>Curveballs: black panthers, white tigers, odd breeds</span>' + seg('curve', [[false, 'Leave out'], [true, 'Include']], S.settings.curve) + '</div>' : '') +
+      '</div>';
+  }
+  function renderNotes() {
+    let credits = '';
+    if (HAS_PHOTOS) {
+      credits = '<h2>Photo credits</h2><p>Every photo is freely licensed. Thank you to the photographers.</p><ul class="credits">' + D.CATS.map((c) => {
+        const list = photosOf(c.id); if (!list.length) return '';
+        return '<li><b>' + esc(c.name) + ':</b> ' + list.map((p) => (p.src ? '<a href="' + esc(p.src) + '" target="_blank" rel="noopener">' + esc(p.by || 'photo') + '</a>' : esc(p.by || 'photo')) + (p.lic ? ' (' + esc(p.lic) + ')' : '')).join('; ') + '</li>';
+      }).join('') + '</ul>';
+    } else {
+      credits = '<h2>Photos</h2><div class="notice"><span><b>Photos are not loaded in this build yet.</b> Each cat gets several freely licensed photos with credits listed here. Until then the rounds use written field marks.</span></div>';
+    }
+    view.innerHTML = '<section class="page">' +
+      '<h1>What counts as a cat</h1>' +
+      '<p class="lede">The count is 41. The IUCN Cat Specialist Group revised the cat family in 2017 and recognised 41 living species: 40 wild cats plus the domestic cat. This trainer uses that list, and it is the one to cite when someone argues.</p>' +
+      '<h2>Names people will throw at you</h2><p>Most of them are a regional form, a colour form or a nickname of one of the 41.</p>' +
+      '<div class="table-wrap"><table class="names"><thead><tr><th scope="col">People say</th><th scope="col">It is</th></tr></thead><tbody>' + NAMES.map((n) => '<tr><td>' + esc(n[0]) + '</td><td>' + esc(n[1]) + '</td></tr>').join('') + '</tbody></table></div>' +
+      '<h2>Four pairs you cannot split by looks</h2><p>Even specialists need to know where these were photographed. The trainer shows the location for them, and you can fairly ask for it.</p>' +
+      '<ul class="plain"><li>Northern tiger cat and southern tiger cat</li><li>Leopard cat and Sunda leopard cat</li><li>Clouded leopard and Sunda clouded leopard, whose coats differ only slightly</li><li>African wildcat, European wildcat and a tabby house cat</li></ul>' +
+      '<h2>Newer splits you can concede</h2><p>Taxonomy moves. These proposals are not on the IUCN list yet. If one is adopted, the count goes up and so does your claim.</p>' +
+      '<ul class="plain"><li><b>Tiger cats.</b> The IUCN list has two. A 2024 study raised a third to species level, the clouded tiger cat (<span class="sci">Leopardus pardinoides</span>). In September 2026 a genome study in Current Biology argued for five and named a new one from Bolivia, the tilcayo (<span class="sci">Leopardus tilcayo</span>).</li>' +
+      '<li><b>Pampas cat.</b> Some checklists split it into several species, such as a separate Pantanal cat. The Cat Specialist Group keeps it as one.</li></ul>' +
+      '<h2>Settings</h2>' + settingsHTML() +
+      '<div class="row"><span>Saved progress on this device</span><span id="reset-zone"><button class="btn small quiet" type="button" data-action="reset-ask">Reset my progress</button></span></div>' +
+      credits +
+      '<h2>Sources</h2><ul class="plain sources">' + SOURCES.map((s) => '<li><a href="' + s[1] + '" target="_blank" rel="noopener">' + esc(s[0]) + '</a></li>').join('') + '</ul>' +
+      '</section>';
+  }
+
+  // ---------- deck sheet and zoom ----------
+  function openDecks() {
+    closeLayer();
+    const groups = {};
+    for (const d of allDecks()) (groups[d.group] = groups[d.group] || []).push(d);
+    let body = '';
+    for (const g of Object.keys(groups)) {
+      body += '<h3>' + esc(g) + '</h3>' + groups[g].map((d) => '<button class="deck" type="button" data-action="pick-deck" data-deck="' + d.id + '"' + (d.id === S.settings.deck ? ' aria-current="true"' : '') + '><b>' + esc(d.name) + '</b>' +
+        '<span>' + coldCount(d.ids) + ' of ' + d.ids.length + ' cold</span></button>').join('');
+    }
+    const el = document.createElement('div');
+    el.className = 'scrim'; el.id = 'layer'; el.dataset.action = 'close-layer';
+    el.innerHTML = '<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title"><div class="sheet-head"><h2 id="sheet-title">Choose a deck</h2><button class="btn small quiet" type="button" data-action="close-layer">Done</button></div>' +
+      '<div class="sheet-body">' + body + '<h3>Round options</h3>' + settingsHTML() + '</div></div>';
+    document.body.appendChild(el);
+    const cur = el.querySelector('.deck[aria-current]') || el.querySelector('.deck');
+    if (cur) cur.focus();
+  }
+  function openZoom(src) {
+    closeLayer();
+    const el = document.createElement('div');
+    el.className = 'zoomer'; el.id = 'layer'; el.dataset.action = 'zoom-toggle';
+    el.innerHTML = '<img src="' + esc(src) + '" alt="The same photo, enlarged"><button class="close" type="button" data-action="close-layer" aria-label="Close the enlarged photo">×</button><span class="tip">Tap to zoom in, then drag to look around</span>';
+    document.body.appendChild(el);
+    el.querySelector('.close').focus();
+  }
+  function closeLayer() { const l = $('#layer'); if (l) l.remove(); }
+
+  // ---------- render ----------
+  function render() {
+    const r = route();
+    closeLayer();
+    paintChrome();
+    if (r.name === 'train') renderTrain();
+    else if (r.name === 'exam') renderExam();
+    else if (r.name === 'cats') renderCats();
+    else if (r.name === 'cat') renderCat(r.id);
+    else renderNotes();
+    document.title = 'Every Cat in the World';
+  }
+  const activeQuiz = () => { const r = route(); const Q = r.name === 'train' ? sessions.train : r.name === 'exam' ? sessions.exam : null; return Q && !Q.done && Q.cur ? Q : null; };
+
+  // ---------- events ----------
+  document.addEventListener('click', (ev) => {
+    const el = ev.target.closest('[data-action]');
+    if (!el) return;
+    const a = el.dataset.action, Q = activeQuiz();
+    if (a === 'close-layer') { if (ev.target === el || el.tagName === 'BUTTON') closeLayer(); return; }
+    if (a === 'zoom-toggle') { if (!ev.target.closest('button')) el.classList.toggle('in'); return; }
+    if (a === 'pick' && Q) submit(Q, { id: el.dataset.id });
+    else if (a === 'skip' && Q) submit(Q, { skip: true });
+    else if (a === 'next' && Q) advance(Q);
+    else if (a === 'zoom') { const img = $('#q-stage .shot'); if (img) openZoom(img.getAttribute('src')); }
+    else if (a === 'open-decks') openDecks();
+    else if (a === 'set-mode') {
+      S.settings.mode = el.dataset.mode; save();
+      if (sessions.train) { sessions.train.mode = S.settings.mode; if (Q && Q.kind === 'train') { $('#p-answer').innerHTML = ''; paintTop(Q); paintPanel(Q, true); } }
+    } else if (a === 'pick-deck') {
+      S.settings.deck = el.dataset.deck; closeLayer(); startRound('train', { deckId: el.dataset.deck });
+      if (route().name !== 'train') location.hash = '#train'; else render();
+    } else if (a === 'set') {
+      const k = el.dataset.key, raw = el.dataset.value;
+      S.settings[k] = raw === 'true' ? true : raw === 'false' ? false : raw === 'deck' ? 'deck' : Number(raw);
+      save();
+      el.parentNode.querySelectorAll('button').forEach((b) => b.setAttribute('aria-checked', String(b === el)));
+      if (k === 'round' && sessions.train && !sessions.train.results.length) { startRound('train', { deckId: S.settings.deck }); if (route().name === 'train' && !$('#layer')) render(); }
+    } else if (a === 'again') { startRound('train', sessions.train && sessions.train.custom ? { ids: sessions.train.ids, name: sessions.train.name } : { deckId: S.settings.deck }); render(); }
+    else if (a === 'drill-misses') {
+      const from = el.dataset.from === 'exam' ? sessions.exam : sessions.train;
+      const ids = [...new Set(from.results.filter((r) => !r.right).map((r) => r.id))];
+      startRound('train', { ids, name: 'Your misses', whole: ids.length > 10 });
+      if (route().name !== 'train') location.hash = '#train'; else render();
+    } else if (a === 'start-exam') { startRound('exam', { mode: el.dataset.mode }); render(); const i = $('#answer'); if (i) i.focus(); }
+    else if (a === 'quit-exam' || a === 'exam-home') { sessions.exam = null; render(); }
+    else if (a === 'copy-brag') {
+      const t = $('#brag'), note = $('#copied');
+      const done = () => { if (note) note.textContent = 'Copied'; };
+      const manual = () => { t.focus(); t.select(); if (note) note.textContent = 'Selected. Copy it from here.'; };
+      try { navigator.clipboard.writeText(t.value).then(done, manual); } catch (e) { manual(); }
+    } else if (a === 'reset-ask') {
+      $('#reset-zone').innerHTML = '<span class="actions"><button class="btn small" type="button" data-action="reset-yes">Yes, wipe it</button><button class="btn small quiet" type="button" data-action="reset-no">Keep it</button></span>';
+    } else if (a === 'reset-no') render();
+    else if (a === 'reset-yes') { const keep = S.settings; S = freshState(); S.settings = keep; sessions.train = null; sessions.exam = null; save(); render(); }
+  });
+  document.addEventListener('submit', (ev) => {
+    if (ev.target.id !== 'typed-form') return;
+    ev.preventDefault();
+    const Q = activeQuiz(); if (!Q) return;
+    const input = $('#answer');
+    if (Q.cur.answered) { input.value = ''; advance(Q); return; }
+    Q.cur.typed = input.value;
+    submit(Q, { text: input.value });
+  });
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape' && $('#layer')) { closeLayer(); return; }
+    if ($('#layer') || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+    const Q = activeQuiz(); if (!Q) return;
+    const tag = ev.target.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (!Q.cur.answered && Q.mode === 'mc' && ev.key >= '1' && ev.key <= '4') { const id = Q.cur.options[Number(ev.key) - 1]; if (id) { ev.preventDefault(); submit(Q, { id }); } }
+    else if (Q.cur.answered && (ev.key === 'Enter' || ev.key === 'ArrowRight') && tag !== 'BUTTON' && tag !== 'A') { ev.preventDefault(); advance(Q); }
+  });
+  // a photo that fails to load is dropped for this visit and the question falls back to another photo or to clues
+  document.addEventListener('error', (ev) => {
+    const t = ev.target;
+    if (!t || !t.dataset || !t.dataset.photo) return;
+    const id = t.dataset.cat, p = photosOf(id).find((x) => x.f === t.dataset.photo);
+    if (p) p.bad = true;
+    const Q = activeQuiz();
+    if (Q && Q.cur.id === id && !Q.cur.answered) {
+      const pi = E.pickPhoto(photosOf(id), S.cats[id], rng, Q.kind !== 'exam' && S.settings.curve);
+      Q.cur.pi = pi; Q.cur.kind = pi >= 0 ? 'photo' : 'clue';
+      paintStage(Q);
+    }
+  }, true);
+  document.addEventListener('focusin', (ev) => { if (ev.target && ev.target.id === 'answer') setTimeout(keepPhotoInView, 250); });
+  window.addEventListener('hashchange', () => { render(); view.scrollTop = 0; view.focus({ preventScroll: true }); });
+
+  // ---------- boot ----------
+  function start(data) {
+    if (data && data.sessions) { for (const k of ['train', 'exam']) { const q = data.sessions[k]; if (q && Array.isArray(q.ids) && q.ids.every((id) => E.byId[id])) sessions[k] = q; } }
+    render();
+  }
+  const hot = window.claude && window.claude.hot;
+  if (hot && hot.snapshot) hot.snapshot(() => ({ sessions: JSON.parse(JSON.stringify(sessions)) }));
+  if (window.__TEST__) window.__everycat = { sessions, state: () => S };
+  if (hot && hot.ready) hot.ready(start); else start((hot && hot.data) || {});
+})();
+
+</script>
+</body>
+</html>
